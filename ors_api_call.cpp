@@ -4,15 +4,38 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-// URL to make the GET call to ORS
-const char* ORS_API =
-"https://api.openrouteservice.org/v2/directions/cycling-regular?"
-"api_key=eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFjYTRhMWI5NGM3NzRiMDFhZDAzY2NkODI4NTQyZWVlIiwiaCI6Im11cm11cjY0In0="
-"&start=8.681495,49.41461"
-"&end=8.687872,49.420318";
+// ORS API endpoint and key (the start/end points are appended dynamically,
+// see getBikeRoute() below)
+const char* ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/cycling-regular";
+const char* ORS_API_KEY =
+"eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFjYTRhMWI5NGM3NzRiMDFhZDAzY2NkODI4NTQyZWVlIiwiaCI6Im11cm11cjY0In0=";
 
-unsigned long previousRequest = 61000;
+// Default departure/arrival points (same spot as the original hardcoded
+// request) - overwritten by setRoutePoints() once the web page sends new ones
+double startLat = 49.41461;
+double startLng = 8.681495;
+double endLat   = 49.420318;
+double endLng   = 8.687872;
+
+unsigned long previousRequest = 61;
 const unsigned long requestInterval = 60000; // 60 seconds
+
+// Set when new points arrive from the web page, so updateBikeRoute() fetches
+// a fresh route on the very next loop() instead of waiting for the timer
+bool routePointsChanged = false;
+
+void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, double newEndLng)
+{
+  startLat = newStartLat;
+  startLng = newStartLng;
+  endLat   = newEndLat;
+  endLng   = newEndLng;
+  routePointsChanged = true;
+
+  Serial.println("New route points received:");
+  Serial.printf("  Start: %f, %f\n", startLat, startLng);
+  Serial.printf("  End:   %f, %f\n", endLat, endLng);
+}
 
 // Function that displays the result of the GET call to the serial Monitor
 void getBikeRoute()
@@ -24,9 +47,16 @@ void getBikeRoute()
         return;
     }
 
+    // Build the request URL from the current start/end points.
+    // ORS expects "lng,lat" order for both start and end.
+    String url = String(ORS_BASE_URL) + "?api_key=" + ORS_API_KEY +
+                 "&start=" + String(startLng, 6) + "," + String(startLat, 6) +
+                 "&end="   + String(endLng, 6)   + "," + String(endLat, 6);
+
     HTTPClient http;
     Serial.println("Sending GET request...");
-    http.begin(ORS_API);
+    Serial.println(url);
+    http.begin(url);
 
     http.addHeader(
     "Accept",
@@ -134,10 +164,14 @@ void getBikeRoute()
 
 void updateBikeRoute()
 {
-  // Every requestInterval milliseconds
-  if (millis() - previousRequest >= requestInterval)
+  bool intervalElapsed = (millis() - previousRequest >= requestInterval);
+
+  // Fetch either on the usual timer, or right away if the web page just
+  // sent new departure/arrival points
+  if (intervalElapsed || routePointsChanged)
   {
       previousRequest = millis();
+      routePointsChanged = false;
       getBikeRoute();
   }
 }

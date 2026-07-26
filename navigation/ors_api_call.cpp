@@ -4,11 +4,12 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
+#include "../display/screen.h"
+#include "ors_api_key.h"
+
 // ORS API endpoint and key (the start/end points are appended dynamically,
 // see getBikeRoute() below)
 const char* ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/cycling-regular";
-const char* ORS_API_KEY =
-"eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFjYTRhMWI5NGM3NzRiMDFhZDAzY2NkODI4NTQyZWVlIiwiaCI6Im11cm11cjY0In0=";
 
 // Default departure/arrival points (same spot as the original hardcoded
 // request) - overwritten by setRoutePoints() once the web page sends new ones

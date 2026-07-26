@@ -8,8 +8,8 @@
 #include "esp_http_server.h"
 #include "esp_https_server.h"
 
-#include "certs.h"
-#include "ors_api_call.h"
+#include "../certs.h"
+#include "../navigation/ors_api_call.h"
 
 httpd_handle_t server = NULL;
 

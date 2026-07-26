@@ -1,28 +1,43 @@
 /*
-  Wifi_Route.ino
-
-  Connects to WiFi via WiFiManager (with a saved-settings config portal),
-  hosts a Leaflet map page to pick departure/arrival points, and
-  periodically fetches a bike route from the ORS API using those points.
 
   Split into:
-    - wifi_connection.h / .cpp : WiFi connection, config portal, saved settings
-    - web_server.h / .cpp      : hosts the Leaflet map page, receives route points
-    - ors_api_call.h / .cpp    : ORS API GET request and JSON parsing
-    - display.h / .cpp         : physical display (placeholder - TODO)
-
-  DroneBot Workshop 2022
-  https://dronebotworkshop.com
-  Functions based upon sketch by Brian Lough
-  https://github.com/witnessmenow/ESP32-WiFi-Manager-Examples
+    - network/   : WiFi connection and web server
+    - navigation/: ORS API GET request and JSON parsing
+    - display/   : OLED screen classes and drawing code
 */
 
 #define ESP_DRD_USE_SPIFFS true
 
-#include "wifi_connection.h"
-#include "web_server.h"
-#include "ors_api_call.h"
-#include "display.h"
+#include "network/wifi_connection.h"
+#include "network/web_server.h"
+
+#include "navigation/ors_api_call.h"
+
+#include "display/screen.h"
+#include "display/homeScreen.h"
+#include "display/navigationScreen.h"
+#include "display/summaryScreen.h"
+
+#include <Adafruit_SSD1306.h>
+
+static const uint8_t OLED_ADDR = 0x3C;
+
+Adafruit_SSD1306 display(
+    128,
+    64,
+    &Wire,
+    -1
+);
+
+HomeScreen home;
+NavigationScreen navigation;
+SummaryScreen summary;
+
+Screen* currentScreen = &home;
+
+void showHomeScreen(){currentScreen = &home;}
+void showNavigationScreen(){currentScreen = &navigation;}
+void showSummaryScreen(){currentScreen = &summary;}
 
 void setup()
 {
@@ -30,10 +45,23 @@ void setup()
   Serial.begin(115200);
   delay(10);
 
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
+  {
+    Serial.println("SSD1306 allocation failed");
+    for (;;)
+    {
+      delay(1000);
+    }
+  }
+
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.display();
+
   setupWifi();
   setupWebServer();
+  currentScreen->draw(display);
 
-  // setupDisplay(); // TODO: enable once display.cpp is implemented
 }
 
 void loop()
@@ -41,6 +69,4 @@ void loop()
   handleWifiResetButton();
   handleWebServer();
   updateBikeRoute();
-
-  // updateDisplay(); // TODO: enable once display.cpp is implemented
 }

@@ -1,16 +1,30 @@
 #include "web_server.h"
 
 #include <WiFi.h>
-#include <WebServer.h>
+#include <stdlib.h>
+
+// Espressif's official HTTPS server component - built into the arduino-esp32
+// core, no third-party library needed.
+#include "esp_http_server.h"
+#include "esp_https_server.h"
+
+#include "certs.h"
 #include "ors_api_call.h"
 
-// HTTP server on the default web port
-WebServer server(80);
+httpd_handle_t server = NULL;
+
+// Last GPS fix received from the phone's continuous tracking (every 5s)
+double trackedLat = 0;
+double trackedLng = 0;
+bool haveTrackedLocation = false;
 
 // The map page itself. Leaflet's CSS/JS are loaded from the unpkg CDN (the
 // ESP32 already has internet access via the ORS calls), so only this small
 // shell needs to be stored on the device.
-const char MAP_PAGE[] PROGMEM = R"rawliteral(
+//
+// Geolocation requires a secure context on mobile browsers, which is why
+// this page is served over HTTPS (self-signed cert in certs.h).
+const char MAP_PAGE[] = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -92,7 +106,6 @@ const char MAP_PAGE[] PROGMEM = R"rawliteral(
     }
 
     // Places latlng into whichever of departure/arrival is still empty.
-    // Does nothing if both are already set.
     function applyToNextSlot(latlng) {
       if (!startMarker) {
         startMarker = L.marker(latlng, { title: 'Departure' }).addTo(map)
@@ -104,8 +117,23 @@ const char MAP_PAGE[] PROGMEM = R"rawliteral(
       updateStatus();
     }
 
-    // Updates/creates the "my location" marker and optionally recenters the
-    // map on it. Calls onDone(latlng) once a fix is obtained (if provided).
+    // Creates/updates the blue "my location" dot
+    function updateMyLocationMarker(latlng) {
+      myLatLng = latlng;
+      if (myLocationMarker) {
+        myLocationMarker.setLatLng(latlng);
+      } else {
+        myLocationMarker = L.circleMarker(latlng, {
+          radius: 8,
+          color: '#2c7be5',
+          fillColor: '#2c7be5',
+          fillOpacity: 0.9,
+          weight: 2
+        }).addTo(map).bindPopup('My location');
+      }
+    }
+
+    // One-shot fix, used on page load and by the Use Location button.
     function locateUser(centerMap, onDone) {
       if (!navigator.geolocation) {
         statusEl.textContent = 'No GPS support';
@@ -115,24 +143,8 @@ const char MAP_PAGE[] PROGMEM = R"rawliteral(
       navigator.geolocation.getCurrentPosition(
         function (pos) {
           const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-          myLatLng = latlng;
-
-          if (myLocationMarker) {
-            myLocationMarker.setLatLng(latlng);
-          } else {
-            myLocationMarker = L.circleMarker(latlng, {
-              radius: 8,
-              color: '#2c7be5',
-              fillColor: '#2c7be5',
-              fillOpacity: 0.9,
-              weight: 2
-            }).addTo(map).bindPopup('My location');
-          }
-
-          if (centerMap) {
-            map.setView(latlng, 15);
-          }
-
+          updateMyLocationMarker(latlng);
+          if (centerMap) map.setView(latlng, 15);
           if (onDone) onDone(latlng);
         },
         function (err) {
@@ -180,6 +192,23 @@ const char MAP_PAGE[] PROGMEM = R"rawliteral(
         .finally(() => { sendBtn.disabled = false; });
     });
 
+    // Continuous tracking: every 5 seconds, grab a fresh GPS fix, update the
+    // blue dot, and push it to the ESP32 so it knows where the phone is
+    // along the route. Runs silently in the background - failures here
+    // don't touch the status text so they don't fight with the buttons above.
+    setInterval(function () {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+          updateMyLocationMarker(latlng);
+          fetch(`/location?lat=${latlng.lat}&lng=${latlng.lng}`).catch(function () {});
+        },
+        function (err) { /* ignore intermittent GPS failures */ },
+        { enableHighAccuracy: true, timeout: 4000 }
+      );
+    }, 5000);
+
     // Try to center on the phone's location as soon as the page loads.
     // Silently falls back to the Paris default view if denied/unavailable.
     locateUser(true);
@@ -188,49 +217,125 @@ const char MAP_PAGE[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-void handleRoot()
+// Reads a single query-string parameter into outBuf. Returns false if the
+// query string or the specific key is missing.
+static bool getQueryParam(httpd_req_t *req, const char *key, char *outBuf, size_t outBufLen)
 {
-  server.send_P(200, "text/html", MAP_PAGE);
+  char query[256];
+  if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK)
+  {
+    return false;
+  }
+  return httpd_query_key_value(query, key, outBuf, outBufLen) == ESP_OK;
 }
 
-void handleSetRoute()
+static esp_err_t handleRoot(httpd_req_t *req)
 {
-  if (!server.hasArg("startLat") || !server.hasArg("startLng") ||
-      !server.hasArg("endLat") || !server.hasArg("endLng"))
+  httpd_resp_set_type(req, "text/html");
+  httpd_resp_send(req, MAP_PAGE, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+static esp_err_t handleSetRoute(httpd_req_t *req)
+{
+  char sLat[32], sLng[32], eLat[32], eLng[32];
+
+  bool ok = getQueryParam(req, "startLat", sLat, sizeof(sLat)) &&
+            getQueryParam(req, "startLng", sLng, sizeof(sLng)) &&
+            getQueryParam(req, "endLat", eLat, sizeof(eLat)) &&
+            getQueryParam(req, "endLng", eLng, sizeof(eLng));
+
+  httpd_resp_set_type(req, "text/plain");
+
+  if (!ok)
   {
-    server.send(400, "text/plain", "Missing lat/lng parameters");
-    return;
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "Missing lat/lng parameters", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
   }
 
-  double newStartLat = server.arg("startLat").toDouble();
-  double newStartLng = server.arg("startLng").toDouble();
-  double newEndLat   = server.arg("endLat").toDouble();
-  double newEndLng   = server.arg("endLng").toDouble();
-
-  setRoutePoints(newStartLat, newStartLng, newEndLat, newEndLng);
-
-  server.send(200, "text/plain", "Route points received, fetching new route...");
+  setRoutePoints(atof(sLat), atof(sLng), atof(eLat), atof(eLng));
+  httpd_resp_send(req, "Route points received, fetching new route...", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
 }
 
-void handleNotFound()
+static esp_err_t handleUpdateLocation(httpd_req_t *req)
 {
-  server.send(404, "text/plain", "Not found");
+  char sLat[32], sLng[32];
+
+  httpd_resp_set_type(req, "text/plain");
+
+  if (!getQueryParam(req, "lat", sLat, sizeof(sLat)) ||
+      !getQueryParam(req, "lng", sLng, sizeof(sLng)))
+  {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "Missing lat/lng parameters", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+
+  trackedLat = atof(sLat);
+  trackedLng = atof(sLng);
+  haveTrackedLocation = true;
+
+  Serial.printf("Tracked location: %f, %f", trackedLat, trackedLng);
+  Serial.println();
+
+  httpd_resp_send(req, "OK", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+static esp_err_t handle404(httpd_req_t *req, httpd_err_code_t err)
+{
+  httpd_resp_set_status(req, "404 Not Found");
+  httpd_resp_set_type(req, "text/plain");
+  httpd_resp_send(req, "Not Found", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
 }
 
 void setupWebServer()
 {
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/route", HTTP_GET, handleSetRoute);
-  server.onNotFound(handleNotFound);
+  httpd_ssl_config_t conf = HTTPD_SSL_CONFIG_DEFAULT();
 
-  server.begin();
+  conf.servercert = (const uint8_t *)servercert_pem;
+  conf.servercert_len = strlen(servercert_pem) + 1;
+  conf.prvtkey_pem = (const uint8_t *)prvtkey_pem;
+  conf.prvtkey_len = strlen(prvtkey_pem) + 1;
 
-  Serial.println("Web server started");
-  Serial.print("Open http://");
+  esp_err_t ret = httpd_ssl_start(&server, &conf);
+  if (ret != ESP_OK)
+  {
+    Serial.printf("Failed to start HTTPS server, error = %d", ret);
+    Serial.println();
+    return;
+  }
+
+  httpd_uri_t uriRoot     = {.uri = "/",         .method = HTTP_GET, .handler = handleRoot,           .user_ctx = NULL};
+  httpd_uri_t uriRoute    = {.uri = "/route",    .method = HTTP_GET, .handler = handleSetRoute,       .user_ctx = NULL};
+  httpd_uri_t uriLocation = {.uri = "/location", .method = HTTP_GET, .handler = handleUpdateLocation, .user_ctx = NULL};
+
+  httpd_register_uri_handler(server, &uriRoot);
+  httpd_register_uri_handler(server, &uriRoute);
+  httpd_register_uri_handler(server, &uriLocation);
+  httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, handle404);
+
+  Serial.println("HTTPS server started");
+  Serial.print("Open https://");
   Serial.println(WiFi.localIP());
+  Serial.println("(Your browser will warn about the self-signed certificate the first time - choose Advanced/Proceed to continue)");
 }
 
 void handleWebServer()
 {
-  server.handleClient();
+  // esp_https_server runs its own background task - nothing to do here.
+}
+
+bool getTrackedLocation(double &lat, double &lng)
+{
+  if (!haveTrackedLocation)
+  {
+    return false;
+  }
+  lat = trackedLat;
+  lng = trackedLng;
+  return true;
 }

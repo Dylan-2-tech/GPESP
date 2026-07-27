@@ -35,9 +35,64 @@ SummaryScreen summary;
 
 Screen* currentScreen = &home;
 
-void showHomeScreen(){currentScreen = &home;}
-void showNavigationScreen(){currentScreen = &navigation;}
-void showSummaryScreen(){currentScreen = &summary;}
+namespace
+{
+constexpr unsigned long BUTTON_DEBOUNCE_MS = 40;
+
+bool lastButtonReading = HIGH;
+bool stableButtonState = HIGH;
+unsigned long lastDebounceTime = 0;
+
+void drawCurrentScreen()
+{
+  currentScreen->draw(display);
+}
+
+void advanceScreen()
+{
+  if (currentScreen == &home)
+  {
+    currentScreen = &summary;
+  }
+  else if (currentScreen == &summary)
+  {
+    currentScreen = &navigation;
+  }
+  else
+  {
+    currentScreen = &home;
+  }
+
+  drawCurrentScreen();
+}
+
+void pollScreenButton()
+{
+  bool reading = digitalRead(TRIGGER_PIN);
+
+  if (reading != lastButtonReading)
+  {
+    lastDebounceTime = millis();
+    lastButtonReading = reading;
+  }
+
+  if ((millis() - lastDebounceTime) > BUTTON_DEBOUNCE_MS)
+  {
+    if (reading != stableButtonState)
+    {
+      stableButtonState = reading;
+      if (stableButtonState == LOW)
+      {
+        advanceScreen();
+      }
+    }
+  }
+}
+}
+
+void showHomeScreen(){currentScreen = &home; drawCurrentScreen();}
+void showNavigationScreen(){currentScreen = &navigation; drawCurrentScreen();}
+void showSummaryScreen(){currentScreen = &summary; drawCurrentScreen();}
 
 void setup()
 {
@@ -58,15 +113,18 @@ void setup()
   display.setTextColor(SSD1306_WHITE);
   display.display();
 
+  // GPIO 4 is now the screen-cycle button.
+  pinMode(TRIGGER_PIN, INPUT_PULLUP);
+
   setupWifi();
   setupWebServer();
-  currentScreen->draw(display);
+  drawCurrentScreen();
 
 }
 
 void loop()
 {
-  handleWifiResetButton();
+  //handleWifiResetButton();
+  pollScreenButton();
   handleWebServer();
-  updateBikeRoute();
 }

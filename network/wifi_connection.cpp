@@ -124,9 +124,6 @@ void setupWifi()
   // Explicitly set WiFi mode
   WiFi.mode(WIFI_STA);
 
-  // Set up the trigger pin used to force a settings reset / config portal
-  pinMode(TRIGGER_PIN, INPUT_PULLUP);
-
   // Reset settings (only for development) - commented out so settings persist;
   // use handleWifiResetButton() in loop() to reset instead
   // wm.resetSettings();
@@ -193,26 +190,26 @@ void setupWifi()
 void handleWifiResetButton()
 {
   // Is the settings-reset / configuration portal requested?
-  if (digitalRead(TRIGGER_PIN) == LOW)
-  {
-    Serial.println("Trigger pin pressed - resetting settings");
-
-    // Wipe saved WiFi credentials and custom parameters
-    wm.resetSettings();
-
-    // Set config portal timeout
-    wm.setConfigPortalTimeout(configPortalTimeout);
-
-    if (!wm.startConfigPortal("GPESP"))
-    {
-      Serial.println("failed to connect and hit timeout");
-      delay(3000);
-      // reset and try again, or maybe put it to deep sleep
-      ESP.restart();
-      delay(5000);
-    }
-
-    // If we get here you have connected to the WiFi
-    Serial.println("connected...yeey :)");
-  }
+  // if (digitalRead(TRIGGER_PIN) == LOW)
+  // {
+  //   Serial.println("Trigger pin pressed - resetting settings");
+  //
+  //   // Wipe saved WiFi credentials and custom parameters
+  //   wm.resetSettings();
+  //
+  //   // Set config portal timeout
+  //   wm.setConfigPortalTimeout(configPortalTimeout);
+  //
+  //   if (!wm.startConfigPortal("GPESP"))
+  //   {
+  //     Serial.println("failed to connect and hit timeout");
+  //     delay(3000);
+  //     // reset and try again, or maybe put it to deep sleep
+  //     ESP.restart();
+  //     delay(5000);
+  //   }
+  //
+  //   // If we get here you have connected to the WiFi
+  //   Serial.println("connected...yeey :)");
+  // }
 }

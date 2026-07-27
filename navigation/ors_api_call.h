@@ -14,4 +14,8 @@ void getBikeRoute();
 // points are set via setRoutePoints().
 void updateBikeRoute();
 
+// Returns true when at least one route summary has been fetched successfully.
+// Output units are meters and seconds.
+bool getRouteSummary(float& distanceMeters, float& durationSeconds);
+
 #endif

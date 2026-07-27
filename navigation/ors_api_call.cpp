@@ -13,10 +13,10 @@ const char* ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/cycli
 
 // Default departure/arrival points (same spot as the original hardcoded
 // request) - overwritten by setRoutePoints() once the web page sends new ones
-double startLat = 49.41461;
-double startLng = 8.681495;
-double endLat   = 49.420318;
-double endLng   = 8.687872;
+double startLat;
+double startLng;
+double endLat;
+double endLng;
 
 unsigned long previousRequest = 61;
 const unsigned long requestInterval = 60000; // 60 seconds
@@ -24,6 +24,10 @@ const unsigned long requestInterval = 60000; // 60 seconds
 // Set when new points arrive from the web page, so updateBikeRoute() fetches
 // a fresh route on the very next loop() instead of waiting for the timer
 bool routePointsChanged = false;
+
+bool hasRouteSummary = false;
+float latestDistanceMeters = 0.0f;
+float latestDurationSeconds = 0.0f;
 
 void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, double newEndLng)
 {
@@ -34,8 +38,12 @@ void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, do
   routePointsChanged = true;
 
   Serial.println("New route points received:");
-  Serial.printf("  Start: %f, %f\n", startLat, startLng);
-  Serial.printf("  End:   %f, %f\n", endLat, endLng);
+  Serial.printf("  Start: %f, %f", startLat, startLng);
+    Serial.println();
+  Serial.printf("  End:   %f, %f", endLat, endLng);
+    Serial.println();
+
+  getBikeRoute();
 }
 
 // Function that displays the result of the GET call to the serial Monitor
@@ -68,7 +76,8 @@ void getBikeRoute()
     // 0 means the query didn't work
     if (httpCode > 0)
     {
-        Serial.printf("HTTP Code: %d\n", httpCode);
+        Serial.printf("HTTP Code: %d", httpCode);
+        Serial.println();
 
         // If the returned code is 200
         if (httpCode == HTTP_CODE_OK)
@@ -84,12 +93,10 @@ void getBikeRoute()
             {
                 Serial.print("JSON parsing failed: ");
                 Serial.println(error.c_str());
+                // Display in the serial the json
+                Serial.println(payload);
                 return;
             }
-
-            // ================================
-            // First route (first feature)
-            // ================================
 
             JsonArray features = doc["features"].as<JsonArray>();
 
@@ -109,6 +116,10 @@ void getBikeRoute()
 
             float totalDistance = summary["distance"];
             float totalDuration = summary["duration"];
+
+            latestDistanceMeters = totalDistance;
+            latestDurationSeconds = totalDuration;
+            hasRouteSummary = true;
 
             Serial.println();
             Serial.println("========== ROUTE ==========");
@@ -163,16 +174,14 @@ void getBikeRoute()
     http.end();
 }
 
-void updateBikeRoute()
+bool getRouteSummary(float& distanceMeters, float& durationSeconds)
 {
-  bool intervalElapsed = (millis() - previousRequest >= requestInterval);
+    if (!hasRouteSummary)
+    {
+        return false;
+    }
 
-  // Fetch either on the usual timer, or right away if the web page just
-  // sent new departure/arrival points
-  if (intervalElapsed || routePointsChanged)
-  {
-      previousRequest = millis();
-      routePointsChanged = false;
-      getBikeRoute();
-  }
+    distanceMeters = latestDistanceMeters;
+    durationSeconds = latestDurationSeconds;
+    return true;
 }

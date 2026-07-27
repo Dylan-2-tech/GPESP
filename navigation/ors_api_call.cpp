@@ -7,9 +7,8 @@
 #include "../display/screen.h"
 #include "ors_api_key.h"
 
-// ORS API endpoint and key (the start/end points are appended dynamically,
-// see getBikeRoute() below)
-const char* ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/cycling-regular";
+// ORS API endpoint and key (POST JSON response variant)
+const char* ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/cycling-regular/json";
 
 // Default departure/arrival points (same spot as the original hardcoded
 // request) - overwritten by setRoutePoints() once the web page sends new ones
@@ -18,15 +17,12 @@ double startLng;
 double endLat;
 double endLng;
 
-unsigned long previousRequest = 61;
-const unsigned long requestInterval = 60000; // 60 seconds
-
 // Set when new points arrive from the web page, so updateBikeRoute() fetches
 // a fresh route on the very next loop() instead of waiting for the timer
 bool routePointsChanged = false;
 
 bool hasRouteSummary = false;
-float latestDistanceMeters = 0.0f;
+float latestDistanceKm = 0.0f;
 float latestDurationSeconds = 0.0f;
 
 void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, double newEndLng)
@@ -46,7 +42,7 @@ void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, do
   getBikeRoute();
 }
 
-// Function that displays the result of the GET call to the serial Monitor
+// Function that displays the result of the POST call to the serial Monitor
 void getBikeRoute()
 {
   // Looks if it's connected to any wifi
@@ -56,22 +52,31 @@ void getBikeRoute()
         return;
     }
 
-    // Build the request URL from the current start/end points.
-    // ORS expects "lng,lat" order for both start and end.
-    String url = String(ORS_BASE_URL) + "?api_key=" + ORS_API_KEY +
-                 "&start=" + String(startLng, 6) + "," + String(startLat, 6) +
-                 "&end="   + String(endLng, 6)   + "," + String(endLat, 6);
+    // ORS expects coordinate order as [lng, lat] in the JSON body.
+    // Keep the response small: we only need the route summary on the ESP32.
+    String body = String("{\"coordinates\":[[") + String(startLng, 6) + "," + String(startLat, 6) +
+                  "],[" + String(endLng, 6) + "," + String(endLat, 6) +
+                  "]]," +
+                  "\"instructions\":false," +
+                  "\"language\":\"en\"," +
+                  "\"maneuvers\":false," +
+                  "\"preference\":\"recommended\"," +
+                  "\"roundabout_exits\":false," +
+                  "\"units\":\"m\"," +
+                  "\"geometry\":false}";
 
     HTTPClient http;
-    Serial.println("Sending GET request...");
-    Serial.println(url);
-    http.begin(url);
+    Serial.println("Sending POST request...");
+    Serial.println(ORS_BASE_URL);
+    http.begin(ORS_BASE_URL);
 
+    http.addHeader("Authorization", ORS_API_KEY);
+    http.addHeader("Content-Type", "application/json");
     http.addHeader(
     "Accept",
-    "application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8");
+    "application/json; charset=utf-8");
 
-    int httpCode = http.GET();
+    int httpCode = http.POST(body);
 
     // 0 means the query didn't work
     if (httpCode > 0)
@@ -82,48 +87,54 @@ void getBikeRoute()
         // If the returned code is 200
         if (httpCode == HTTP_CODE_OK)
         {
-            // obtain and print the response from the API
-            String payload = http.getString();
+            // Parse directly from the network stream to avoid buffering the
+            // whole response in RAM.
+            StaticJsonDocument<128> filter;
+            filter["routes"][0]["summary"]["distance"] = true;
+            filter["routes"][0]["summary"]["duration"] = true;
 
-            JsonDocument doc;
+            StaticJsonDocument<384> doc;
 
-            DeserializationError error = deserializeJson(doc, payload);
+            DeserializationError error = deserializeJson(
+                doc,
+                http.getStream(),
+                DeserializationOption::Filter(filter));
 
             if (error)
             {
                 Serial.print("JSON parsing failed: ");
                 Serial.println(error.c_str());
-                // Display in the serial the json
-                Serial.println(payload);
+                Serial.print("HTTP content length: ");
+                Serial.println(http.getSize());
                 return;
             }
 
-            JsonArray features = doc["features"].as<JsonArray>();
+            JsonArray routes = doc["routes"].as<JsonArray>();
 
-            if (features.isNull() || features.size() == 0)
+            if (routes.isNull() || routes.size() == 0)
             {
                 Serial.println("No routes returned.");
                 return;
             }
 
-            JsonObject firstRoute = features[0];
+            JsonObject firstRoute = routes[0];
 
             // ================================
             // Route summary
             // ================================
 
-            JsonObject summary = firstRoute["properties"]["summary"];
+            JsonObject summary = firstRoute["summary"];
 
             float totalDistance = summary["distance"];
             float totalDuration = summary["duration"];
 
-            latestDistanceMeters = totalDistance;
+            latestDistanceKm = totalDistance;
             latestDurationSeconds = totalDuration;
             hasRouteSummary = true;
 
             Serial.println();
             Serial.println("========== ROUTE ==========");
-            Serial.printf("Distance : %.1f m", totalDistance);
+            Serial.printf("Distance : %.1f km", totalDistance);
             Serial.println();
             Serial.printf("Duration : %.1f s", totalDuration);
             Serial.println();
@@ -132,37 +143,36 @@ void getBikeRoute()
             // Segments
             // ================================
 
-            JsonArray segments =
-                firstRoute["properties"]["segments"].as<JsonArray>();
+            //JsonArray segments = firstRoute["segments"].as<JsonArray>();
+            //
+            //Serial.printf("Segments : %d", segments.size());
+            //Serial.println();
 
-            Serial.printf("Segments : %d", segments.size());
-            Serial.println();
+            //for (int seg = 0; seg < segments.size(); seg++)
+            //{
+            //    JsonObject segment = segments[seg];
 
-            for (int seg = 0; seg < segments.size(); seg++)
-            {
-                JsonObject segment = segments[seg];
+            //    Serial.printf("---- Segment %d ----", seg);
+            //    Serial.println();
 
-                Serial.printf("---- Segment %d ----", seg);
-                Serial.println();
+            //    JsonArray steps = segment["steps"];
 
-                JsonArray steps = segment["steps"];
+            //    for (int step = 0; step < steps.size(); step++)
+            //    {
+            //        JsonObject currentStep = steps[step];
 
-                for (int step = 0; step < steps.size(); step++)
-                {
-                    JsonObject currentStep = steps[step];
+            //        int type = currentStep["type"];
+            //        const char* instruction =
+            //            currentStep["instruction"];
 
-                    int type = currentStep["type"];
-                    const char* instruction =
-                        currentStep["instruction"];
+            //        Serial.printf("[%d] %s",
+            //                      type,
+            //                      instruction);
+            //        Serial.println();
+            //    }
 
-                    Serial.printf("[%d] %s",
-                                  type,
-                                  instruction);
-                    Serial.println();
-                }
-
-                Serial.println();
-            }
+            //    Serial.println();
+            //}
         }
     }
     else // If the querry didn't work
@@ -174,14 +184,14 @@ void getBikeRoute()
     http.end();
 }
 
-bool getRouteSummary(float& distanceMeters, float& durationSeconds)
+bool getRouteSummary(float& distanceKm, float& durationSeconds)
 {
     if (!hasRouteSummary)
     {
         return false;
     }
 
-    distanceMeters = latestDistanceMeters;
+    distanceKm = latestDistanceKm;
     durationSeconds = latestDurationSeconds;
     return true;
 }

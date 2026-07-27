@@ -5,9 +5,9 @@
 void SummaryScreen::draw(
     Adafruit_SSD1306& display)
 {
-    float distanceMeters = 0.0f;
+    float distanceKm = 0.0f;
     float durationSeconds = 0.0f;
-    bool hasSummary = getRouteSummary(distanceMeters, durationSeconds);
+    bool hasSummary = getRouteSummary(distanceKm, durationSeconds);
 
     display.clearDisplay();
 
@@ -24,7 +24,6 @@ void SummaryScreen::draw(
     display.print("Distance: ");
     if (hasSummary)
     {
-        float distanceKm = distanceMeters / 1000.0f;
         display.print(distanceKm, 1);
     }
     else

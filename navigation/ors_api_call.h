@@ -9,13 +9,8 @@ void setRoutePoints(double startLat, double startLng, double endLat, double endL
 // Serial monitor. Requires WiFi to already be connected.
 void getBikeRoute();
 
-// Call every loop(). Internally tracks timing and calls getBikeRoute()
-// once every requestInterval milliseconds, or immediately after new route
-// points are set via setRoutePoints().
-void updateBikeRoute();
-
 // Returns true when at least one route summary has been fetched successfully.
 // Output units are meters and seconds.
-bool getRouteSummary(float& distanceMeters, float& durationSeconds);
+bool getRouteSummary(float& distanceKm, float& durationSeconds);
 
 #endif

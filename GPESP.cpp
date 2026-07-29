@@ -1,0 +1,6 @@
+#include "display/homeScreen.cpp"
+#include "display/navigationScreen.cpp"
+#include "display/summaryScreen.cpp"
+#include "network/wifi_connection.cpp"
+#include "network/web_server.cpp"
+#include "navigation/ors_api_call.cpp"

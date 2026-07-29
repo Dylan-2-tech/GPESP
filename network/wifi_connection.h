@@ -10,7 +10,7 @@
 // JSON configuration file
 #define JSON_CONFIG_FILE "/test_config.json"
 
-// Pin used to trigger a settings reset / config portal
+// GPIO 4 is shared with the main sketch's screen-cycle button.
 #define TRIGGER_PIN 4
 
 // Seconds to run the on-demand config portal for
@@ -30,8 +30,7 @@ extern WiFiManager wm;
 // previously saved settings from SPIFFS.
 void setupWifi();
 
-// Call every loop(). Checks the trigger pin and, if pressed, wipes the
-// saved settings and reopens the config portal.
+// Kept for compatibility with the old reset-button flow; currently a no-op.
 void handleWifiResetButton();
 
 // Configuration file helpers

@@ -6,6 +6,7 @@
 #include <SPIFFS.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
+#include "../display/screen.h"
 
 // JSON configuration file
 #define JSON_CONFIG_FILE "/test_config.json"

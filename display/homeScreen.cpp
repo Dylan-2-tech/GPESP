@@ -1,7 +1,5 @@
 #include "homeScreen.h"
 
-#include <cstring>
-
 namespace
 {
 void drawCenteredText(Adafruit_SSD1306& display, const char* text, int16_t y, uint8_t textSize)

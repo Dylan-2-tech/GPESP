@@ -1,6 +1,11 @@
 #ifndef ORS_API_CALL_H
 #define ORS_API_CALL_H
 
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include "ors_api_key.h"
+
 // Sets the departure/arrival points to use for the next ORS request(s).
 // Coordinates are in decimal degrees (lat/lng, WGS84 - what Leaflet gives you).
 void setRoutePoints(double startLat, double startLng, double endLat, double endLng);

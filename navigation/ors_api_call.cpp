@@ -1,10 +1,5 @@
 #include "ors_api_call.h"
 
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
-#include "ors_api_key.h"
-
 // ORS API endpoint and key (POST JSON response variant)
 const char* ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/cycling-regular/json";
 
@@ -64,8 +59,6 @@ void getBikeRoute()
                   "\"units\":\"km\"," +
                   "\"geometry\":true}";
 
-    String body2 = "{\"coordinates\":[[8.681495,49.41461],[8.686507,49.41943],[8.687872,49.420318]],\"maneuvers\":\"true\",\"preference\":\"recommended\",\"roundabout_exits\":\"true\",\"units\":\"km\",\"geometry\":\"true\"}";
-
     HTTPClient http;
     Serial.println("Sending POST request...");
     Serial.println(ORS_BASE_URL);
@@ -78,17 +71,13 @@ void getBikeRoute()
     "Accept",
     "application/json; charset=utf-8");
 
-    int httpCode = http.POST(body2);
+    int httpCode = http.POST(body);
 
     // 0 means the query didn't work
     if (httpCode > 0)
     {
         Serial.printf("HTTP Code: %d", httpCode);
         Serial.println();
-
-        Serial.println("HTTP response body:");
-        Serial.println("--------------------");
-        Serial.println(body2);
 
         // If the returned code is 200
         if (httpCode == HTTP_CODE_OK)

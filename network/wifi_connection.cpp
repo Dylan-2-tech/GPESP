@@ -1,7 +1,5 @@
 #include "wifi_connection.h"
 
-#include "../display/screen.h"
-
 // Seconds to run the on-demand config portal for
 int configPortalTimeout = 120;
 

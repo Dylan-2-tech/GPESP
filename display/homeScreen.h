@@ -1,6 +1,8 @@
 #pragma once
 
 #include "screen.h"
+#include <cstring>
+
 
 // Different types of home screen states
 /*

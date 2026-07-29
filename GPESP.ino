@@ -90,6 +90,16 @@ void pollScreenButton()
 }
 }
 
+void showHomeScreenState(int type, const char* param)
+{
+  home.setState(type, param);
+
+  if (currentScreen == &home)
+  {
+    drawCurrentScreen();
+  }
+}
+
 void showHomeScreen(){currentScreen = &home; drawCurrentScreen();}
 void showNavigationScreen(){currentScreen = &navigation; drawCurrentScreen();}
 void showSummaryScreen(){currentScreen = &summary; drawCurrentScreen();}
@@ -113,18 +123,17 @@ void setup()
   display.setTextColor(SSD1306_WHITE);
   display.display();
 
+  drawCurrentScreen();
+
   // GPIO 4 is now the screen-cycle button.
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
 
   setupWifi();
   setupWebServer();
-  drawCurrentScreen();
-
 }
 
 void loop()
 {
   //handleWifiResetButton();
   pollScreenButton();
-  handleWebServer();
 }

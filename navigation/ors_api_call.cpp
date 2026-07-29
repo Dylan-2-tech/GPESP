@@ -3,8 +3,6 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-
-#include "../display/screen.h"
 #include "ors_api_key.h"
 
 // ORS API endpoint and key (POST JSON response variant)
@@ -53,21 +51,25 @@ void getBikeRoute()
     }
 
     // ORS expects coordinate order as [lng, lat] in the JSON body.
-    // Keep the response small: we only need the route summary on the ESP32.
+    // Request the full route payload we need for the serial output and
+    // summary screen, but keep it limited to a single optimized route.
     String body = String("{\"coordinates\":[[") + String(startLng, 6) + "," + String(startLat, 6) +
                   "],[" + String(endLng, 6) + "," + String(endLat, 6) +
                   "]]," +
-                  "\"instructions\":false," +
+                  "\"instructions\":true," +
                   "\"language\":\"en\"," +
-                  "\"maneuvers\":false," +
+                  "\"maneuvers\":true," +
                   "\"preference\":\"recommended\"," +
-                  "\"roundabout_exits\":false," +
-                  "\"units\":\"m\"," +
-                  "\"geometry\":false}";
+                  "\"roundabout_exits\":true," +
+                  "\"units\":\"km\"," +
+                  "\"geometry\":true}";
+
+    String body2 = "{\"coordinates\":[[8.681495,49.41461],[8.686507,49.41943],[8.687872,49.420318]],\"maneuvers\":\"true\",\"preference\":\"recommended\",\"roundabout_exits\":\"true\",\"units\":\"km\",\"geometry\":\"true\"}";
 
     HTTPClient http;
     Serial.println("Sending POST request...");
     Serial.println(ORS_BASE_URL);
+    http.useHTTP10(true); // Disable the chunked data transfer encoding, which the ORS API doesn't support
     http.begin(ORS_BASE_URL);
 
     http.addHeader("Authorization", ORS_API_KEY);
@@ -76,7 +78,7 @@ void getBikeRoute()
     "Accept",
     "application/json; charset=utf-8");
 
-    int httpCode = http.POST(body);
+    int httpCode = http.POST(body2);
 
     // 0 means the query didn't work
     if (httpCode > 0)
@@ -84,21 +86,21 @@ void getBikeRoute()
         Serial.printf("HTTP Code: %d", httpCode);
         Serial.println();
 
+        Serial.println("HTTP response body:");
+        Serial.println("--------------------");
+        Serial.println(body2);
+
         // If the returned code is 200
         if (httpCode == HTTP_CODE_OK)
         {
             // Parse directly from the network stream to avoid buffering the
-            // whole response in RAM.
-            StaticJsonDocument<128> filter;
-            filter["routes"][0]["summary"]["distance"] = true;
-            filter["routes"][0]["summary"]["duration"] = true;
+            // whole response in RAM. Only one route is returned, so we can
+            // read the full payload and access routes[0] directly.
+            DynamicJsonDocument doc(6144);
+            
+            Serial.println(http.getStream());
 
-            StaticJsonDocument<384> doc;
-
-            DeserializationError error = deserializeJson(
-                doc,
-                http.getStream(),
-                DeserializationOption::Filter(filter));
+            DeserializationError error = deserializeJson(doc, http.getStream());
 
             if (error)
             {
@@ -109,21 +111,19 @@ void getBikeRoute()
                 return;
             }
 
-            JsonArray routes = doc["routes"].as<JsonArray>();
+            JsonObject route = doc["routes"][0].as<JsonObject>();
 
-            if (routes.isNull() || routes.size() == 0)
+            if (route.isNull())
             {
                 Serial.println("No routes returned.");
                 return;
             }
 
-            JsonObject firstRoute = routes[0];
-
             // ================================
             // Route summary
             // ================================
 
-            JsonObject summary = firstRoute["summary"];
+            JsonObject summary = route["summary"];
 
             float totalDistance = summary["distance"];
             float totalDuration = summary["duration"];
@@ -139,47 +139,54 @@ void getBikeRoute()
             Serial.printf("Duration : %.1f s", totalDuration);
             Serial.println();
 
+            const char* geometry = route["geometry"] | "";
+            Serial.println("Route geometry:");
+            Serial.println(geometry);
+
             // ================================
-            // Segments
+            // Steps
             // ================================
 
-            //JsonArray segments = firstRoute["segments"].as<JsonArray>();
-            //
-            //Serial.printf("Segments : %d", segments.size());
-            //Serial.println();
+            JsonArray segments = route["segments"].as<JsonArray>();
 
-            //for (int seg = 0; seg < segments.size(); seg++)
-            //{
-            //    JsonObject segment = segments[seg];
+            if (!segments.isNull())
+            {
+                for (JsonVariant segmentVariant : segments)
+                {
+                    JsonObject segment = segmentVariant.as<JsonObject>();
+                    if (segment.isNull())
+                    {
+                        continue;
+                    }
 
-            //    Serial.printf("---- Segment %d ----", seg);
-            //    Serial.println();
+                    JsonArray steps = segment["steps"].as<JsonArray>();
 
-            //    JsonArray steps = segment["steps"];
+                    if (steps.isNull())
+                    {
+                        continue;
+                    }
 
-            //    for (int step = 0; step < steps.size(); step++)
-            //    {
-            //        JsonObject currentStep = steps[step];
+                    for (JsonVariant stepVariant : steps)
+                    {
+                        JsonObject step = stepVariant.as<JsonObject>();
+                        if (step.isNull())
+                        {
+                            continue;
+                        }
 
-            //        int type = currentStep["type"];
-            //        const char* instruction =
-            //            currentStep["instruction"];
-
-            //        Serial.printf("[%d] %s",
-            //                      type,
-            //                      instruction);
-            //        Serial.println();
-            //    }
-
-            //    Serial.println();
-            //}
+                        const char* instruction = step["instruction"] | "";
+                        Serial.println(instruction);
+                    }
+                }
+            }
         }
     }
     else // If the querry didn't work
     {
-        Serial.print("GET failed: ");
+        Serial.print("POST failed: ");
         Serial.println(http.errorToString(httpCode));
     }
+
     // Closing http to not use to much resources
     http.end();
 }

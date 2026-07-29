@@ -1,7 +1,6 @@
 #include "navigationScreen.h"
 
-void NavigationScreen::draw(
-    Adafruit_SSD1306& display)
+void NavigationScreen::draw(Adafruit_SSD1306& display)
 {
     display.clearDisplay();
 

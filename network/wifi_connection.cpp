@@ -1,5 +1,7 @@
 #include "wifi_connection.h"
 
+#include "../display/screen.h"
+
 // Seconds to run the on-demand config portal for
 int configPortalTimeout = 120;
 
@@ -111,6 +113,10 @@ void configModeCallback(WiFiManager *myWiFiManager)
 
 void setupWifi()
 {
+
+  // Display onto the OLED display that we are starting WiFi setup
+  showHomeScreenState(0);
+
   // Change to true when testing to force configuration every time we run
   bool forceConfig = false;
 
@@ -172,6 +178,10 @@ void setupWifi()
   Serial.println("WiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+  showHomeScreenState(1, WiFi.SSID().c_str());
+
+  // Display the connected WiFi SSID and IP address onto the OLED display
 
   // Lets deal with the user config values
 

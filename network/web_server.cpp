@@ -3,6 +3,8 @@
 #include <WiFi.h>
 #include <stdlib.h>
 
+#include "../display/screen.h"
+
 // Espressif's official HTTPS server component - built into the arduino-esp32
 // core, no third-party library needed.
 #include "esp_http_server.h"
@@ -294,6 +296,10 @@ static esp_err_t handle404(httpd_req_t *req, httpd_err_code_t err)
 
 void setupWebServer()
 {
+
+  // Display onto the OLED display that we are starting the web server
+  showHomeScreenState(2);
+
   httpd_ssl_config_t conf = HTTPD_SSL_CONFIG_DEFAULT();
 
   conf.servercert = (const uint8_t *)servercert_pem;
@@ -322,11 +328,11 @@ void setupWebServer()
   Serial.print("Open https://");
   Serial.println(WiFi.localIP());
   Serial.println("(Your browser will warn about the self-signed certificate the first time - choose Advanced/Proceed to continue)");
-}
 
-void handleWebServer()
-{
-  // esp_https_server runs its own background task - nothing to do here.
+  String serverAddress = "https://" + WiFi.localIP().toString() + "/";
+  showHomeScreenState(3, serverAddress.c_str());
+
+  // Display onto the OLED display that the web server has started and show the IP address
 }
 
 bool getTrackedLocation(double &lat, double &lng)

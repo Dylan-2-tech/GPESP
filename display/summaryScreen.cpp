@@ -2,8 +2,7 @@
 
 #include "../navigation/ors_api_call.h"
 
-void SummaryScreen::draw(
-    Adafruit_SSD1306& display)
+void SummaryScreen::draw(Adafruit_SSD1306& display)
 {
     float distanceKm = 0.0f;
     float durationSeconds = 0.0f;

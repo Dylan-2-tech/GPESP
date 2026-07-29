@@ -6,11 +6,6 @@
 // 443, using the self-signed certificate embedded in certs.h.
 void setupWebServer();
 
-// esp_https_server runs its own background FreeRTOS task, so unlike the
-// old library, nothing needs to be pumped from loop(). This is kept as a
-// no-op so main.ino doesn't need to change.
-void handleWebServer();
-
 // Last GPS fix received from the phone's continuous location tracking
 // (the web page sends one every 5 seconds). Returns false if none has
 // been received yet.

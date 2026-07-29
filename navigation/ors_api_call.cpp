@@ -98,8 +98,6 @@ void getBikeRoute()
             // read the full payload and access routes[0] directly.
             DynamicJsonDocument doc(6144);
             
-            Serial.println(http.getStream());
-
             DeserializationError error = deserializeJson(doc, http.getStream());
 
             if (error)

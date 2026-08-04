@@ -4,3 +4,4 @@ network/certs.h
 NextFixes.txt
 .vscode/
 test/
+decoding.py

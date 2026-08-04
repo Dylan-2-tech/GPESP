@@ -128,8 +128,8 @@ void setup()
   // GPIO 4 is now the screen-cycle button.
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
 
-  setupWifi();
-  setupWebServer();
+  //setupWifi();
+  //setupWebServer();
 }
 
 void loop()

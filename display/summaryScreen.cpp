@@ -45,7 +45,5 @@ void SummaryScreen::draw(Adafruit_SSD1306& display)
     display.setCursor(0, 48);
     display.println("ETA: not implemented");
 
-
-
     display.display();
 }

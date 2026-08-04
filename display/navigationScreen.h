@@ -1,6 +1,13 @@
 #pragma once
 
 #include "screen.h"
+#include "../navigation/ors_api_call.h"
+
+#define MAX_INSTRUCTIONS 1000
+
+// Buffer for the route instructions
+static int routeInstructions[MAX_INSTRUCTIONS];
+static int currentIndex = 0;
 
 // Enumeration for the four cardinal directions
 enum Direction
@@ -34,6 +41,6 @@ public:
 
     void set_current_direction(Direction direction);
 
-    private:
+private:
     Direction current_direction = Direction::STRAIGHT;
 };

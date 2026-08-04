@@ -13,6 +13,7 @@ double endLng;
 // Set when new points arrive from the web page, so updateBikeRoute() fetches
 // a fresh route on the very next loop() instead of waiting for the timer
 bool routePointsChanged = false;
+bool routeReturned = false;
 
 bool hasRouteSummary = false;
 float latestDistanceKm = 0.0f;
@@ -152,7 +153,8 @@ void getBikeRoute()
                     {
                         continue;
                     }
-
+                    
+                    int InstructionsIndex = 0;
                     for (JsonVariant stepVariant : steps)
                     {
                         JsonObject step = stepVariant.as<JsonObject>();
@@ -163,6 +165,7 @@ void getBikeRoute()
 
                         const char* instruction = step["instruction"] | "";
                         Serial.println(instruction);
+                        routeInstructions[InstructionsIndex++] = step["type"] | -1;
                     }
                 }
             }

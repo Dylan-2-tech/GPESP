@@ -10,9 +10,7 @@
 
 #include "network/wifi_connection.h"
 #include "network/web_server.h"
-
 #include "navigation/ors_api_call.h"
-
 #include "display/screen.h"
 #include "display/homeScreen.h"
 #include "display/navigationScreen.h"

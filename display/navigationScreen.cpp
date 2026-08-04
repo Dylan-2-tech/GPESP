@@ -29,10 +29,18 @@ void NavigationScreen::draw(Adafruit_SSD1306& display)
         break;
     
     default:
+        display.setTextSize(1);
+        display.setCursor(10, 24);
+        display.println("Direction not implemented");
         break;
     }
     
     display.display();
+}
+
+void NavigationScreen::set_current_direction(Direction direction)
+{
+    current_direction = direction;
 }
 
 void NavigationScreen::draw_left_arrow(Adafruit_SSD1306& display)

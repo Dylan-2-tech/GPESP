@@ -1,7 +1,7 @@
 #include "ors_api_call.h"
 
 // ORS API endpoint and key (POST JSON response variant)
-const char* ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/cycling-regular/json";
+const char* ORS_BASE_URL = "https://api.heigit.org/openrouteservice/v2/directions/cycling-regular/json";
 
 // Default departure/arrival points (same spot as the original hardcoded
 // request) - overwritten by setRoutePoints() once the web page sends new ones

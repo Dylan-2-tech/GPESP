@@ -5,6 +5,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "ors_api_key.h"
+#include "../display/navigationScreen.h"
 
 // Sets the departure/arrival points to use for the next ORS request(s).
 // Coordinates are in decimal degrees (lat/lng, WGS84 - what Leaflet gives you).
@@ -17,5 +18,6 @@ void getBikeRoute();
 // Returns true when at least one route summary has been fetched successfully.
 // Output units are meters and seconds.
 bool getRouteSummary(float& distanceKm, float& durationSeconds);
+
 
 #endif

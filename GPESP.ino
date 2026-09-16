@@ -23,11 +23,10 @@
 static const uint8_t OLED_ADDR = 0x3C;
 
 Adafruit_SSD1306 display(
-    128,
-    64,
-    &Wire,
-    -1
-);
+  128,
+  64,
+  &Wire,
+  -1);
 
 HomeScreen home;
 NavigationScreen navigation;
@@ -35,54 +34,41 @@ SummaryScreen summary;
 
 Screen* currentScreen = &home;
 
-namespace
-{
+namespace {
 constexpr unsigned long BUTTON_DEBOUNCE_MS = 40;
 
 bool lastButtonReading = HIGH;
 bool stableButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 
-void drawCurrentScreen()
-{
+void drawCurrentScreen() {
   currentScreen->draw(display);
 }
 
-void advanceScreen()
-{
-  if (currentScreen == &home)
-  {
+void advanceScreen() {
+  if (currentScreen == &home) {
     currentScreen = &summary;
-  }
-  else if (currentScreen == &summary)
-  {
+  } else if (currentScreen == &summary) {
     currentScreen = &navigation;
-  }
-  else
-  {
+  } else {
     currentScreen = &home;
   }
 
   drawCurrentScreen();
 }
 
-void pollScreenButton()
-{
+void pollScreenButton() {
   bool reading = digitalRead(TRIGGER_PIN);
 
-  if (reading != lastButtonReading)
-  {
+  if (reading != lastButtonReading) {
     lastDebounceTime = millis();
     lastButtonReading = reading;
   }
 
-  if ((millis() - lastDebounceTime) > BUTTON_DEBOUNCE_MS)
-  {
-    if (reading != stableButtonState)
-    {
+  if ((millis() - lastDebounceTime) > BUTTON_DEBOUNCE_MS) {
+    if (reading != stableButtonState) {
       stableButtonState = reading;
-      if (stableButtonState == LOW)
-      {
+      if (stableButtonState == LOW) {
         advanceScreen();
       }
     }
@@ -90,31 +76,35 @@ void pollScreenButton()
 }
 }
 
-void showHomeScreenState(int type, const char* param)
-{
+void showHomeScreenState(int type, const char* param) {
   home.setState(type, param);
 
-  if (currentScreen == &home)
-  {
+  if (currentScreen == &home) {
     drawCurrentScreen();
   }
 }
 
-void showHomeScreen(){currentScreen = &home; drawCurrentScreen();}
-void showNavigationScreen(){currentScreen = &navigation; drawCurrentScreen();}
-void showSummaryScreen(){currentScreen = &summary; drawCurrentScreen();}
+void showHomeScreen() {
+  currentScreen = &home;
+  drawCurrentScreen();
+}
+void showNavigationScreen() {
+  currentScreen = &navigation;
+  drawCurrentScreen();
+}
+void showSummaryScreen() {
+  currentScreen = &summary;
+  drawCurrentScreen();
+}
 
-void setup()
-{
+void setup() {
   // Setup Serial monitor
   Serial.begin(115200);
   delay(10);
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
-  {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
     Serial.println("SSD1306 allocation failed");
-    for (;;)
-    {
+    for (;;) {
       delay(1000);
     }
   }
@@ -132,8 +122,7 @@ void setup()
   setupWebServer();
 }
 
-void loop()
-{
+void loop() {
   //handleWifiResetButton();
   pollScreenButton();
 }

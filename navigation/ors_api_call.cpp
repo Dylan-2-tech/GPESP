@@ -58,13 +58,20 @@ void getBikeRoute()
                   "\"preference\":\"recommended\"," +
                   "\"roundabout_exits\":true," +
                   "\"units\":\"km\"," +
-                  "\"geometry\":true}";
+                  "\"geometry\":false}";
 
     HTTPClient http;
     Serial.println("Sending POST request...");
     Serial.println(ORS_BASE_URL);
-    http.useHTTP10(true); // Disable the chunked data transfer encoding, which the ORS API doesn't support
-    http.begin(ORS_BASE_URL);
+    http.setTimeout(30000);
+    http.setReuse(false);
+
+    if (!http.begin(ORS_BASE_URL))
+    {
+        Serial.println("Could not start ORS HTTPS request.");
+        http.end();
+        return;
+    }
 
     http.addHeader("Authorization", ORS_API_KEY);
     http.addHeader("Content-Type", "application/json");
@@ -77,25 +84,27 @@ void getBikeRoute()
     // 0 means the query didn't work
     if (httpCode > 0)
     {
-        Serial.printf("HTTP Code: %d", httpCode);
-        Serial.println();
-
         // If the returned code is 200
         if (httpCode == HTTP_CODE_OK)
         {
-            // Parse directly from the network stream to avoid buffering the
-            // whole response in RAM. Only one route is returned, so we can
-            // read the full payload and access routes[0] directly.
-            DynamicJsonDocument doc(6144);
-            
-            DeserializationError error = deserializeJson(doc, http.getStream());
+            String response = http.getString();
+
+            if (response.length() == 0)
+            {
+                Serial.println("ORS returned an empty response body.");
+                http.end();
+                return;
+            }
+
+            DynamicJsonDocument doc(12288);
+
+            DeserializationError error = deserializeJson(doc, response);
 
             if (error)
             {
                 Serial.print("JSON parsing failed: ");
                 Serial.println(error.c_str());
-                Serial.print("HTTP content length: ");
-                Serial.println(http.getSize());
+                http.end();
                 return;
             }
 
@@ -104,6 +113,7 @@ void getBikeRoute()
             if (route.isNull())
             {
                 Serial.println("No routes returned.");
+                http.end();
                 return;
             }
 

@@ -18,6 +18,7 @@ bool routeReturned = false;
 bool hasRouteSummary = false;
 float latestDistanceKm = 0.0f;
 float latestDurationSeconds = 0.0f;
+String latestRouteGeometry;
 
 void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, double newEndLng)
 {
@@ -39,6 +40,9 @@ void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, do
 // Function that displays the result of the POST call to the serial Monitor
 void getBikeRoute()
 {
+        latestRouteGeometry = "";
+        hasRouteSummary = false;
+
   // Looks if it's connected to any wifi
     if (WiFi.status() != WL_CONNECTED)
     {
@@ -58,7 +62,7 @@ void getBikeRoute()
                   "\"preference\":\"recommended\"," +
                   "\"roundabout_exits\":true," +
                   "\"units\":\"km\"," +
-                  "\"geometry\":false}";
+                  "\"geometry\":true}";
 
     HTTPClient http;
     Serial.println("Sending POST request...");
@@ -96,7 +100,7 @@ void getBikeRoute()
                 return;
             }
 
-            DynamicJsonDocument doc(12288);
+            DynamicJsonDocument doc(24576);
 
             DeserializationError error = deserializeJson(doc, response);
 
@@ -138,6 +142,7 @@ void getBikeRoute()
             Serial.println();
 
             const char* geometry = route["geometry"] | "";
+            latestRouteGeometry = geometry;
             Serial.println("Route geometry:");
             Serial.println(geometry);
 
@@ -200,5 +205,16 @@ bool getRouteSummary(float& distanceKm, float& durationSeconds)
 
     distanceKm = latestDistanceKm;
     durationSeconds = latestDurationSeconds;
+    return true;
+}
+
+bool getRouteGeometry(String& geometry)
+{
+    if (latestRouteGeometry.length() == 0)
+    {
+        return false;
+    }
+
+    geometry = latestRouteGeometry;
     return true;
 }

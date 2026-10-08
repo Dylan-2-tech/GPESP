@@ -76,6 +76,7 @@ const char MAP_PAGE[] = R"rawliteral(
 
     let startMarker = null;
     let endMarker = null;
+    let routeLine = null;
     let myLocationMarker = null; // kept across Reset - only Departure/Arrival get cleared
     let myLatLng = null;         // last known GPS fix, reused by the Use Location button
 
@@ -93,6 +94,61 @@ const char MAP_PAGE[] = R"rawliteral(
         statusEl.textContent = 'Ready';
       }
       sendBtn.disabled = !(startMarker && endMarker);
+    }
+
+    function decodePolyline(encodedPolyline, includeElevation) {
+      const points = [];
+      let index = 0;
+      let lat = 0;
+      let lng = 0;
+      let elevation = 0;
+
+      function decodeValue() {
+        let result = 0;
+        let shift = 0;
+
+        while (true) {
+          if (index >= encodedPolyline.length) throw new Error('Truncated route geometry');
+          const value = encodedPolyline.charCodeAt(index++) - 63;
+          if (value < 0 || value > 63) throw new Error('Invalid route geometry');
+          result |= (value & 0x1f) << shift;
+          shift += 5;
+          if (value < 0x20) return (result & 1) ? ~(result >> 1) : (result >> 1);
+          if (shift > 30) throw new Error('Invalid route geometry');
+        }
+      }
+
+      while (index < encodedPolyline.length) {
+        lat += decodeValue();
+        lng += decodeValue();
+        if (includeElevation) elevation += decodeValue();
+
+        const point = [lat / 1e5, lng / 1e5];
+        if (includeElevation) point.push(elevation / 100);
+        points.push(point);
+      }
+
+      return points;
+    }
+
+    function clearRouteLine() {
+      if (routeLine) {
+        map.removeLayer(routeLine);
+        routeLine = null;
+      }
+    }
+
+    function displayRoute(encodedGeometry) {
+      clearRouteLine();
+      const points = decodePolyline(encodedGeometry, false);
+      if (points.length < 2) throw new Error('Route geometry is empty');
+
+      routeLine = L.polyline(points, {
+        color: '#d62828',
+        weight: 5,
+        opacity: 0.9
+      }).addTo(map);
+      map.fitBounds(routeLine.getBounds(), { padding: [36, 36] });
     }
 
     // Places latlng into whichever of departure/arrival is still empty.
@@ -151,6 +207,7 @@ const char MAP_PAGE[] = R"rawliteral(
     resetBtn.addEventListener('click', function () {
       if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
       if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
+      clearRouteLine();
       // myLocationMarker is intentionally left on the map
       updateStatus();
     });
@@ -176,9 +233,22 @@ const char MAP_PAGE[] = R"rawliteral(
       sendBtn.disabled = true;
 
       fetch(url)
-        .then(r => r.text())
-        .then(t => { statusEl.textContent = 'Sent'; })
-        .catch(err => { statusEl.textContent = 'Error'; })
+        .then(function (response) {
+          return response.json().then(function (result) {
+            if (!response.ok || !result.ok || !result.geometry) {
+              throw new Error(result.error || 'Route unavailable');
+            }
+            return result;
+          });
+        })
+        .then(function (result) {
+          displayRoute(result.geometry);
+          statusEl.textContent = 'Route ready';
+        })
+        .catch(function (err) {
+          clearRouteLine();
+          statusEl.textContent = err.message || 'Error';
+        })
         .finally(() => { sendBtn.disabled = false; });
     });
 
@@ -235,17 +305,38 @@ static esp_err_t handleSetRoute(httpd_req_t *req)
             getQueryParam(req, "endLat", eLat, sizeof(eLat)) &&
             getQueryParam(req, "endLng", eLng, sizeof(eLng));
 
-  httpd_resp_set_type(req, "text/plain");
+  httpd_resp_set_type(req, "application/json");
 
   if (!ok)
   {
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, "Missing lat/lng parameters", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, "{\"ok\":false,\"error\":\"Missing lat/lng parameters\"}", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
   }
 
   setRoutePoints(atof(sLat), atof(sLng), atof(eLat), atof(eLng));
-  httpd_resp_send(req, "Route points received, fetching new route...", HTTPD_RESP_USE_STRLEN);
+
+  String geometry;
+  if (!getRouteGeometry(geometry))
+  {
+    httpd_resp_set_status(req, "502 Bad Gateway");
+    httpd_resp_send(req, "{\"ok\":false,\"error\":\"No route geometry returned\"}", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+
+  String response = "{\"ok\":true,\"geometry\":\"";
+  response.reserve(geometry.length() + 32);
+  for (size_t index = 0; index < geometry.length(); ++index)
+  {
+    char character = geometry[index];
+    if (character == '\\' || character == '"')
+    {
+      response += '\\';
+    }
+    response += character;
+  }
+  response += "\"}";
+  httpd_resp_send(req, response.c_str(), response.length());
   return ESP_OK;
 }
 

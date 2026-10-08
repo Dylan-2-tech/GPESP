@@ -1,7 +1,7 @@
 /Display_test_python
 navigation/ors_api_key.h
+navigation/polyline_decoder.js
 network/certs.h
 NextFixes.txt
 .vscode/
 test/
-decoding.py

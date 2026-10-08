@@ -2,6 +2,7 @@
 #define WIFI_CONNECTION_H
 
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include <WiFiManager.h>
@@ -41,5 +42,8 @@ bool loadConfigFile();
 // WiFiManager callbacks
 void saveConfigCallback();
 void configModeCallback(WiFiManager *myWiFiManager);
+
+// Starts the local hostname used by the HTTPS server.
+bool setupMdns();
 
 #endif

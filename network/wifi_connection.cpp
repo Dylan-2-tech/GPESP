@@ -177,6 +177,8 @@ void setupWifi()
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
+  setupMdns();
+
   showHomeScreenState(1, WiFi.SSID().c_str());
 
   // Display the connected WiFi SSID and IP address onto the OLED display
@@ -193,6 +195,19 @@ void setupWifi()
   {
     saveConfigFile();
   }
+}
+
+bool setupMdns()
+{
+  if (!MDNS.begin("gpesp"))
+  {
+    Serial.println("mDNS startup failed");
+    return false;
+  }
+
+  MDNS.addService("https", "tcp", 443);
+  Serial.println("mDNS started at https://gpesp.local/");
+  return true;
 }
 
 void handleWifiResetButton()

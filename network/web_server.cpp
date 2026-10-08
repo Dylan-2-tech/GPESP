@@ -404,6 +404,7 @@ void setupWebServer()
   httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, handle404);
 
   Serial.println("HTTPS server started");
+  Serial.println("Open https://gpesp.local");
   Serial.print("Open https://");
   Serial.println(WiFi.localIP());
   Serial.println("(Your browser will warn about the self-signed certificate the first time - choose Advanced/Proceed to continue)");

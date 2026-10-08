@@ -77,6 +77,7 @@ const char MAP_PAGE[] = R"rawliteral(
     let startMarker = null;
     let endMarker = null;
     let routeLine = null;
+    let routeRequestActive = false;
     let myLocationMarker = null; // kept across Reset - only Departure/Arrival get cleared
     let myLatLng = null;         // last known GPS fix, reused by the Use Location button
 
@@ -149,6 +150,35 @@ const char MAP_PAGE[] = R"rawliteral(
         opacity: 0.9
       }).addTo(map);
       map.fitBounds(routeLine.getBounds(), { padding: [36, 36] });
+    }
+
+    function pollRouteStatus() {
+      fetch('/route-status')
+        .then(function (response) {
+          if (!response.ok) throw new Error('Route status unavailable');
+          return response.json();
+        })
+        .then(function (result) {
+          if (result.state === 'ready' && result.geometry) {
+            displayRoute(result.geometry);
+            statusEl.textContent = 'Route ready';
+            routeRequestActive = false;
+            sendBtn.disabled = false;
+          } else if (result.state === 'failed') {
+            throw new Error(result.error || 'Route unavailable');
+          } else {
+            statusEl.textContent = result.state === 'fetching_geometry'
+              ? 'Fetching map...'
+              : 'Fetching route...';
+            setTimeout(pollRouteStatus, 500);
+          }
+        })
+        .catch(function (err) {
+          clearRouteLine();
+          statusEl.textContent = err.message || 'Error';
+          routeRequestActive = false;
+          sendBtn.disabled = false;
+        });
     }
 
     // Places latlng into whichever of departure/arrival is still empty.
@@ -235,21 +265,23 @@ const char MAP_PAGE[] = R"rawliteral(
       fetch(url)
         .then(function (response) {
           return response.json().then(function (result) {
-            if (!response.ok || !result.ok || !result.geometry) {
+            if (!response.ok || !result.ok) {
               throw new Error(result.error || 'Route unavailable');
             }
             return result;
           });
         })
-        .then(function (result) {
-          displayRoute(result.geometry);
-          statusEl.textContent = 'Route ready';
+        .then(function () {
+          routeRequestActive = true;
+          statusEl.textContent = 'Fetching route...';
+          pollRouteStatus();
         })
         .catch(function (err) {
           clearRouteLine();
+          routeRequestActive = false;
           statusEl.textContent = err.message || 'Error';
-        })
-        .finally(() => { sendBtn.disabled = false; });
+          sendBtn.disabled = false;
+        });
     });
 
     // Continuous tracking: every 5 seconds, grab a fresh GPS fix, update the
@@ -257,6 +289,7 @@ const char MAP_PAGE[] = R"rawliteral(
     // along the route. Runs silently in the background - failures here
     // don't touch the status text so they don't fight with the buttons above.
     setInterval(function () {
+      if (routeRequestActive) return;
       if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
         function (pos) {
@@ -316,15 +349,42 @@ static esp_err_t handleSetRoute(httpd_req_t *req)
 
   setRoutePoints(atof(sLat), atof(sLng), atof(eLat), atof(eLng));
 
+  httpd_resp_set_status(req, "202 Accepted");
+  httpd_resp_send(req, "{\"ok\":true,\"state\":\"queued\"}", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+static esp_err_t handleRouteStatus(httpd_req_t *req)
+{
+  httpd_resp_set_type(req, "application/json");
+
+  RouteState state = getRouteState();
+  const char* stateText = "idle";
+  if (state == ROUTE_FETCHING_INSTRUCTIONS) stateText = "fetching_instructions";
+  else if (state == ROUTE_FETCHING_GEOMETRY) stateText = "fetching_geometry";
+  else if (state == ROUTE_READY) stateText = "ready";
+  else if (state == ROUTE_FAILED) stateText = "failed";
+
+  if (state != ROUTE_READY)
+  {
+    String response = "{\"ok\":";
+    response += state == ROUTE_FAILED ? "false" : "true";
+    response += ",\"state\":\"";
+    response += stateText;
+    response += "\"}";
+    httpd_resp_send(req, response.c_str(), response.length());
+    return ESP_OK;
+  }
+
   String geometry;
   if (!getRouteGeometry(geometry))
   {
     httpd_resp_set_status(req, "502 Bad Gateway");
-    httpd_resp_send(req, "{\"ok\":false,\"error\":\"No route geometry returned\"}", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, "{\"ok\":false,\"state\":\"failed\",\"error\":\"No route geometry returned\"}", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
   }
 
-  String response = "{\"ok\":true,\"geometry\":\"";
+  String response = "{\"ok\":true,\"state\":\"ready\",\"geometry\":\"";
   response.reserve(geometry.length() + 32);
   for (size_t index = 0; index < geometry.length(); ++index)
   {
@@ -396,10 +456,12 @@ void setupWebServer()
 
   httpd_uri_t uriRoot     = {.uri = "/",         .method = HTTP_GET, .handler = handleRoot,           .user_ctx = NULL};
   httpd_uri_t uriRoute    = {.uri = "/route",    .method = HTTP_GET, .handler = handleSetRoute,       .user_ctx = NULL};
+  httpd_uri_t uriRouteStatus = {.uri = "/route-status", .method = HTTP_GET, .handler = handleRouteStatus, .user_ctx = NULL};
   httpd_uri_t uriLocation = {.uri = "/location", .method = HTTP_GET, .handler = handleUpdateLocation, .user_ctx = NULL};
 
   httpd_register_uri_handler(server, &uriRoot);
   httpd_register_uri_handler(server, &uriRoute);
+  httpd_register_uri_handler(server, &uriRouteStatus);
   httpd_register_uri_handler(server, &uriLocation);
   httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, handle404);
 

@@ -6,9 +6,24 @@
 #include <ArduinoJson.h>
 #include "ors_api_key.h"
 
+enum RouteState
+{
+	ROUTE_IDLE,
+	ROUTE_FETCHING_INSTRUCTIONS,
+	ROUTE_FETCHING_GEOMETRY,
+	ROUTE_READY,
+	ROUTE_FAILED
+};
+
 // Sets the departure/arrival points to use for the next ORS request(s).
 // Coordinates are in decimal degrees (lat/lng, WGS84 - what Leaflet gives you).
 void setRoutePoints(double startLat, double startLng, double endLat, double endLng);
+
+// Runs a queued route request. Call from loop(), not from a web-server handler.
+void processRouteRequest();
+
+// Returns the current asynchronous route request state.
+RouteState getRouteState();
 
 // Fetches the current bike route from the ORS API and prints it to the
 // Serial monitor. Requires WiFi to already be connected.

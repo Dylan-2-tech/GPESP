@@ -123,4 +123,5 @@ void setup() {
 void loop() {
   //handleWifiResetButton();
   pollScreenButton();
+  processRouteRequest();
 }

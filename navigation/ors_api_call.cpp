@@ -14,6 +14,8 @@ bool hasRouteSummary = false;
 float latestDistanceKm = 0.0f;
 float latestDurationSeconds = 0.0f;
 String latestRouteGeometry;
+RouteState routeState = ROUTE_IDLE;
+bool routeRequestPending = false;
 
 void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, double newEndLng)
 {
@@ -27,7 +29,21 @@ void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, do
   Serial.printf("  End:   %f, %f", endLat, endLng);
     Serial.println();
 
-  getBikeRoute();
+    latestRouteGeometry = F("");
+    hasRouteSummary = false;
+    routeState = ROUTE_FETCHING_INSTRUCTIONS;
+    routeRequestPending = true;
+}
+
+void processRouteRequest()
+{
+        if (!routeRequestPending)
+        {
+                return;
+        }
+
+        routeRequestPending = false;
+        getBikeRoute();
 }
 
 static bool fetchRouteResponse(const char* body, DynamicJsonDocument& doc)
@@ -94,6 +110,7 @@ void getBikeRoute()
     if (WiFi.status() != WL_CONNECTED)
     {
         Serial.println(F("WiFi not connected"));
+        routeState = ROUTE_FAILED;
         return;
     }
 
@@ -123,6 +140,7 @@ void getBikeRoute()
         geometryLength < 0 || static_cast<size_t>(geometryLength) >= sizeof(geometryBody))
     {
         Serial.println(F("ORS request body is too large."));
+        routeState = ROUTE_FAILED;
         return;
     }
 
@@ -132,6 +150,7 @@ void getBikeRoute()
         DynamicJsonDocument instructionsDoc(24576);
         if (!fetchRouteResponse(instructionsBody, instructionsDoc))
         {
+            routeState = ROUTE_FAILED;
             return;
         }
 
@@ -139,6 +158,7 @@ void getBikeRoute()
         if (instructionsRoute.isNull())
         {
             Serial.println(F("No route returned from instructions request."));
+            routeState = ROUTE_FAILED;
             return;
         }
 
@@ -184,12 +204,14 @@ void getBikeRoute()
         }
     }
 
+    routeState = ROUTE_FETCHING_GEOMETRY;
     Serial.println(F("Sending ORS geometry request..."));
     DynamicJsonDocument geometryDoc(12288);
     if (!fetchRouteResponse(geometryBody, geometryDoc))
     {
         latestRouteGeometry = F("");
         Serial.println(F("Geometry request failed."));
+        routeState = ROUTE_FAILED;
         return;
     }
 
@@ -198,12 +220,19 @@ void getBikeRoute()
     {
         latestRouteGeometry = F("");
         Serial.println(F("No route returned from geometry request."));
+        routeState = ROUTE_FAILED;
         return;
     }
 
     latestRouteGeometry = geometryRoute["geometry"] | "";
     Serial.println(F("Route geometry:"));
     Serial.println(latestRouteGeometry);
+    routeState = latestRouteGeometry.length() > 0 ? ROUTE_READY : ROUTE_FAILED;
+}
+
+RouteState getRouteState()
+{
+    return routeState;
 }
 
 bool getRouteSummary(float& distanceKm, float& durationSeconds)

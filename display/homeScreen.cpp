@@ -47,15 +47,15 @@ void HomeScreen::draw(Adafruit_SSD1306& display)
     {
         display.setTextSize(1);
         display.setCursor(10, 46);
-        display.println("Starting...");
+        display.println(F("Starting..."));
         display.setCursor(10, 56);
-        display.println("Connect to GPESP WiFi to configure");
+        display.println(F("Connect to GPESP WiFi to configure"));
     }
     else if (stateType == 1) // Connected state
     {
         display.setTextSize(1);
         display.setCursor(10, 46);
-        display.println("Connected to WiFi:");
+        display.println(F("Connected to WiFi:"));
         display.setCursor(10, 56);
         display.println(stateParam[0] != '\0' ? stateParam : "--");
     }
@@ -63,13 +63,13 @@ void HomeScreen::draw(Adafruit_SSD1306& display)
     {
         display.setTextSize(1);
         display.setCursor(10, 46);
-        display.println("Setting up Web Server...");
+        display.println(F("Setting up Web Server..."));
     }
     else if (stateType == 3) // WebServer started
     {
         display.setTextSize(1);
         display.setCursor(10, 46);
-        display.println("Web Server started:");
+        display.println(F("Web Server started:"));
         display.setCursor(10, 56);
         display.println(stateParam[0] != '\0' ? stateParam : "--");
     }

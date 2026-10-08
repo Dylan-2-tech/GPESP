@@ -101,7 +101,7 @@ void setup() {
   delay(10);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
-    Serial.println("SSD1306 allocation failed");
+    Serial.println(F("SSD1306 allocation failed"));
     for (;;) {
       delay(1000);
     }

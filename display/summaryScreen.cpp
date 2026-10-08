@@ -12,25 +12,25 @@ void SummaryScreen::draw(Adafruit_SSD1306& display)
 
     display.setTextSize(2);
     display.setCursor(0, 0);
-    display.println("Route");
+    display.println(F("Route"));
 
     display.drawLine(0, 18, 127, 18, SSD1306_WHITE);
 
     display.setTextSize(1);
     display.setCursor(0, 24);
-    display.print("Distance: ");
+    display.print(F("Distance: "));
     if (hasSummary)
     {
         display.print(distanceKm, 1);
     }
     else
     {
-        display.print("--");
+        display.print(F("--"));
     }
-    display.println(" km");
+    display.println(F(" km"));
 
     display.setCursor(0, 36);
-    display.print("Time: ");
+    display.print(F("Time: "));
     if (hasSummary)
     {
         float durationMin = durationSeconds / 60.0f;
@@ -38,12 +38,12 @@ void SummaryScreen::draw(Adafruit_SSD1306& display)
     }
     else
     {
-        display.print("--");
+        display.print(F("--"));
     }
-    display.println(" min");
+    display.println(F(" min"));
 
     display.setCursor(0, 48);
-    display.println("ETA: not implemented");
+    display.println(F("ETA: not implemented"));
 
     display.display();
 }

@@ -10,7 +10,7 @@ void NavigationScreen::draw(Adafruit_SSD1306& display)
 
     display.setTextSize(2);
     display.setCursor(0, 0);
-    display.println("Navigation");
+    display.println(F("Navigation"));
     display.drawFastHLine(0, 16, 128, SSD1306_WHITE);
 
     switch (current_direction)
@@ -31,7 +31,7 @@ void NavigationScreen::draw(Adafruit_SSD1306& display)
     default:
         display.setTextSize(1);
         display.setCursor(10, 24);
-        display.println("Direction not implemented");
+        display.println(F("Direction not implemented"));
         break;
     }
     

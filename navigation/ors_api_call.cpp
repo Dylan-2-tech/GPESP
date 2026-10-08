@@ -10,11 +10,6 @@ double startLng;
 double endLat;
 double endLng;
 
-// Set when new points arrive from the web page, so updateBikeRoute() fetches
-// a fresh route on the very next loop() instead of waiting for the timer
-bool routePointsChanged = false;
-bool routeReturned = false;
-
 bool hasRouteSummary = false;
 float latestDistanceKm = 0.0f;
 float latestDurationSeconds = 0.0f;
@@ -26,9 +21,7 @@ void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, do
   startLng = newStartLng;
   endLat   = newEndLat;
   endLng   = newEndLng;
-  routePointsChanged = true;
-
-  Serial.println("New route points received:");
+    Serial.println(F("New route points received:"));
   Serial.printf("  Start: %f, %f", startLat, startLng);
     Serial.println();
   Serial.printf("  End:   %f, %f", endLat, endLng);
@@ -40,39 +33,44 @@ void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, do
 // Function that displays the result of the POST call to the serial Monitor
 void getBikeRoute()
 {
-        latestRouteGeometry = "";
+        latestRouteGeometry = F("");
         hasRouteSummary = false;
 
   // Looks if it's connected to any wifi
     if (WiFi.status() != WL_CONNECTED)
     {
-        Serial.println("WiFi not connected");
+        Serial.println(F("WiFi not connected"));
         return;
     }
 
     // ORS expects coordinate order as [lng, lat] in the JSON body.
     // Request the full route payload we need for the serial output and
     // summary screen, but keep it limited to a single optimized route.
-    String body = String("{\"coordinates\":[[") + String(startLng, 6) + "," + String(startLat, 6) +
-                  "],[" + String(endLng, 6) + "," + String(endLat, 6) +
-                  "]]," +
-                  "\"instructions\":true," +
-                  "\"language\":\"en\"," +
-                  "\"maneuvers\":true," +
-                  "\"preference\":\"recommended\"," +
-                  "\"roundabout_exits\":true," +
-                  "\"units\":\"km\"," +
-                  "\"geometry\":true}";
+    char body[320];
+    int bodyLength = snprintf(
+        body,
+        sizeof(body),
+        "{\"coordinates\":[[%.6f,%.6f],[%.6f,%.6f]],\"instructions\":true,\"language\":\"en\",\"maneuvers\":true,\"preference\":\"recommended\",\"roundabout_exits\":true,\"units\":\"km\",\"geometry\":true}",
+        startLng,
+        startLat,
+        endLng,
+        endLat);
+
+    if (bodyLength < 0 || static_cast<size_t>(bodyLength) >= sizeof(body))
+    {
+        Serial.println(F("ORS request body is too large."));
+        return;
+    }
 
     HTTPClient http;
-    Serial.println("Sending POST request...");
+    Serial.println(F("Sending POST request..."));
     Serial.println(ORS_BASE_URL);
     http.setTimeout(30000);
     http.setReuse(false);
 
     if (!http.begin(ORS_BASE_URL))
     {
-        Serial.println("Could not start ORS HTTPS request.");
+        Serial.println(F("Could not start ORS HTTPS request."));
         http.end();
         return;
     }
@@ -95,7 +93,7 @@ void getBikeRoute()
 
             if (response.length() == 0)
             {
-                Serial.println("ORS returned an empty response body.");
+                Serial.println(F("ORS returned an empty response body."));
                 http.end();
                 return;
             }
@@ -106,7 +104,7 @@ void getBikeRoute()
 
             if (error)
             {
-                Serial.print("JSON parsing failed: ");
+                Serial.print(F("JSON parsing failed: "));
                 Serial.println(error.c_str());
                 http.end();
                 return;
@@ -116,7 +114,7 @@ void getBikeRoute()
 
             if (route.isNull())
             {
-                Serial.println("No routes returned.");
+                Serial.println(F("No routes returned."));
                 http.end();
                 return;
             }
@@ -135,7 +133,7 @@ void getBikeRoute()
             hasRouteSummary = true;
 
             Serial.println();
-            Serial.println("========== ROUTE ==========");
+            Serial.println(F("========== ROUTE =========="));
             Serial.printf("Distance : %.1f km", totalDistance);
             Serial.println();
             Serial.printf("Duration : %.1f s", totalDuration);
@@ -143,7 +141,7 @@ void getBikeRoute()
 
             const char* geometry = route["geometry"] | "";
             latestRouteGeometry = geometry;
-            Serial.println("Route geometry:");
+            Serial.println(F("Route geometry:"));
             Serial.println(geometry);
 
             // ================================
@@ -188,7 +186,7 @@ void getBikeRoute()
     }
     else // If the querry didn't work
     {
-        Serial.print("POST failed: ");
+        Serial.print(F("POST failed: "));
         Serial.println(http.errorToString(httpCode));
     }
 

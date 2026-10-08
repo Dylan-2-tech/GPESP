@@ -26,7 +26,7 @@ void saveConfigFile()
   if (!configFile)
   {
     // Error, file did not open
-    Serial.println("failed to open config file for writing");
+    Serial.println(F("failed to open config file for writing"));
   }
 
   // Serialize JSON data to write to file
@@ -47,26 +47,26 @@ bool loadConfigFile()
   // SPIFFS.format();
 
   // Read configuration from FS json
-  Serial.println("Mounting File System...");
+  Serial.println(F("Mounting File System..."));
 
   // May need to make it begin(true) first time you are using SPIFFS
   if (SPIFFS.begin(false) || SPIFFS.begin(true))
   {
-    Serial.println("mounted file system");
+    Serial.println(F("mounted file system"));
     if (SPIFFS.exists(JSON_CONFIG_FILE))
     {
       // The file exists, reading and loading
-      Serial.println("reading config file");
+      Serial.println(F("reading config file"));
       File configFile = SPIFFS.open(JSON_CONFIG_FILE, "r");
       if (configFile)
       {
-        Serial.println("Opened configuration file");
+        Serial.println(F("Opened configuration file"));
         StaticJsonDocument<512> json;
         DeserializationError error = deserializeJson(json, configFile);
         serializeJsonPretty(json, Serial);
         if (!error)
         {
-          Serial.println("Parsing JSON");
+          Serial.println(F("Parsing JSON"));
 
           const char* loadedUserName = json["userNameString"] | "";
           strncpy(userNameString, loadedUserName, sizeof(userNameString));
@@ -76,7 +76,7 @@ bool loadConfigFile()
         else
         {
           // Error loading JSON data
-          Serial.println("Failed to load json config");
+          Serial.println(F("Failed to load json config"));
         }
       }
     }
@@ -84,7 +84,7 @@ bool loadConfigFile()
   else
   {
     // Error mounting file system
-    Serial.println("Failed to mount FS");
+    Serial.println(F("Failed to mount FS"));
   }
 
   return false;
@@ -93,19 +93,19 @@ bool loadConfigFile()
 void saveConfigCallback()
 // Callback notifying us of the need to save configuration
 {
-  Serial.println("Should save config");
+  Serial.println(F("Should save config"));
   shouldSaveConfig = true;
 }
 
 void configModeCallback(WiFiManager *myWiFiManager)
 // Called when config mode launched
 {
-  Serial.println("Entered Configuration Mode");
+  Serial.println(F("Entered Configuration Mode"));
 
-  Serial.print("Config SSID: ");
+  Serial.print(F("Config SSID: "));
   Serial.println(myWiFiManager->getConfigPortalSSID());
 
-  Serial.print("Config IP Address: ");
+  Serial.print(F("Config IP Address: "));
   Serial.println(WiFi.softAPIP());
 }
 
@@ -151,7 +151,7 @@ void setupWifi()
   {
     if (!wm.startConfigPortal("GPESP"))
     {
-      Serial.println("failed to connect and hit timeout");
+      Serial.println(F("failed to connect and hit timeout"));
       delay(3000);
       //reset and try again, or maybe put it to deep sleep
       ESP.restart();
@@ -162,7 +162,7 @@ void setupWifi()
   {
     if (!wm.autoConnect("GPESP"))
     {
-      Serial.println("failed to connect and hit timeout");
+      Serial.println(F("failed to connect and hit timeout"));
       delay(3000);
       // if we still have not connected restart and try all over again
       ESP.restart();
@@ -172,9 +172,9 @@ void setupWifi()
 
   // If we get here, we are connected to the WiFi
 
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
+  Serial.println(F(""));
+  Serial.println(F("WiFi connected"));
+  Serial.print(F("IP address: "));
   Serial.println(WiFi.localIP());
 
   setupMdns();
@@ -187,7 +187,7 @@ void setupWifi()
 
   // Copy the username value
   strncpy(userNameString, custom_text_box_username.getValue(), sizeof(userNameString));
-  Serial.print("userNameString: ");
+  Serial.print(F("userNameString: "));
   Serial.println(userNameString);
 
   // Save the custom parameters to FS
@@ -201,12 +201,12 @@ bool setupMdns()
 {
   if (!MDNS.begin("gpesp"))
   {
-    Serial.println("mDNS startup failed");
+    Serial.println(F("mDNS startup failed"));
     return false;
   }
 
   MDNS.addService("https", "tcp", 443);
-  Serial.println("mDNS started at https://gpesp.local/");
+  Serial.println(F("mDNS started at https://gpesp.local/"));
   return true;
 }
 

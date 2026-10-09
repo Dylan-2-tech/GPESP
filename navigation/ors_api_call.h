@@ -15,9 +15,20 @@ enum RouteState
 	ROUTE_FAILED
 };
 
+struct GeocodeResult
+{
+	String label;
+	double lat;
+	double lng;
+};
+
 // Sets the departure/arrival points to use for the next ORS request(s).
 // Coordinates are in decimal degrees (lat/lng, WGS84 - what Leaflet gives you).
 void setRoutePoints(double startLat, double startLng, double endLat, double endLng);
+
+// Searches ORS for an address and returns up to maxResults matches.
+// Results use decimal-degree latitude/longitude values for Leaflet.
+bool searchAddress(const char* query, GeocodeResult* results, size_t maxResults, size_t& resultCount);
 
 // Runs a queued route request. Call from loop(), not from a web-server handler.
 void processRouteRequest();

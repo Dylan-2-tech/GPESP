@@ -2,6 +2,7 @@
 
 // ORS API endpoint and key (POST JSON response variant)
 const char* ORS_BASE_URL = "https://api.heigit.org/openrouteservice/v2/directions/cycling-regular/json";
+const char* ORS_GEOCODE_BASE_URL = "https://api.openrouteservice.org/geocode/search";
 
 // Default departure/arrival points (same spot as the original hardcoded
 // request) - overwritten by setRoutePoints() once the web page sends new ones
@@ -16,6 +17,109 @@ float latestDurationSeconds = 0.0f;
 String latestRouteGeometry;
 RouteState routeState = ROUTE_IDLE;
 bool routeRequestPending = false;
+
+static bool isUrlSafe(char character)
+{
+    return (character >= 'a' && character <= 'z') ||
+                 (character >= 'A' && character <= 'Z') ||
+                 (character >= '0' && character <= '9') ||
+                 character == '-' || character == '_' || character == '.' || character == '~';
+}
+
+static String urlEncode(const char* value)
+{
+    const char hex[] = "0123456789ABCDEF";
+    String encoded;
+    encoded.reserve(strlen(value) * 3);
+
+    for (const char* character = value; *character != '\0'; ++character)
+    {
+        unsigned char byte = static_cast<unsigned char>(*character);
+        if (isUrlSafe(*character))
+        {
+            encoded += *character;
+        }
+        else if (*character == ' ')
+        {
+            encoded += '+';
+        }
+        else
+        {
+            encoded += '%';
+            encoded += hex[byte >> 4];
+            encoded += hex[byte & 0x0F];
+        }
+    }
+
+    return encoded;
+}
+
+bool searchAddress(const char* query, GeocodeResult* results, size_t maxResults, size_t& resultCount)
+{
+    resultCount = 0;
+    if (query == nullptr || results == nullptr || maxResults == 0 || strlen(query) == 0 || WiFi.status() != WL_CONNECTED)
+    {
+        return false;
+    }
+
+    String url = ORS_GEOCODE_BASE_URL;
+    url += "?text=";
+    url += urlEncode(query);
+    url += "&size=5&boundary.country=FRA";
+
+    HTTPClient http;
+    http.setTimeout(15000);
+    http.setReuse(false);
+    if (!http.begin(url))
+    {
+        return false;
+    }
+
+    http.addHeader("Authorization", ORS_API_KEY);
+    http.addHeader("Accept", "application/json");
+    int httpCode = http.GET();
+    if (httpCode != HTTP_CODE_OK)
+    {
+        http.end();
+        return false;
+    }
+
+    DynamicJsonDocument document(12288);
+    DeserializationError error = deserializeJson(document, http.getStream());
+    http.end();
+    if (error)
+    {
+        return false;
+    }
+
+    JsonArray features = document["features"].as<JsonArray>();
+    if (features.isNull())
+    {
+        return true;
+    }
+
+    for (JsonObject feature : features)
+    {
+        if (resultCount >= maxResults)
+        {
+            break;
+        }
+
+        JsonArray coordinates = feature["geometry"]["coordinates"].as<JsonArray>();
+        const char* label = feature["properties"]["label"] | "";
+        if (coordinates.size() < 2 || label[0] == '\0')
+        {
+            continue;
+        }
+
+        results[resultCount].lng = coordinates[0] | 0.0;
+        results[resultCount].lat = coordinates[1] | 0.0;
+        results[resultCount].label = label;
+        ++resultCount;
+    }
+
+    return true;
+}
 
 void setRoutePoints(double newStartLat, double newStartLng, double newEndLat, double newEndLng)
 {

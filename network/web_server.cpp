@@ -47,6 +47,24 @@ const char MAP_PAGE[] = R"rawliteral(
       max-width: 92vw;
     }
 
+    #searchPanel {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 1000;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      width: min(92vw, 520px);
+      padding: 8px 10px;
+      background: rgba(255, 255, 255, 0.94);
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    #searchPanel input { flex: 1 1 220px; min-width: 0; padding: 7px 8px; font-size: 14px; border: 1px solid #adb5bd; border-radius: 6px; }
+    #searchResults { display: none; flex-basis: 100%; max-height: 180px; overflow-y: auto; }
+    .result { display: block; width: 100%; padding: 7px; text-align: left; background: #f8f9fa; color: #212529; border: 1px solid #dee2e6; border-radius: 4px; white-space: normal; }
+
     #status { font-size: 13px; white-space: nowrap; }
 
     button { padding: 6px 12px; font-size: 14px; border: none; border-radius: 6px; background: #2c7be5; color: #fff; white-space: nowrap; }
@@ -62,6 +80,12 @@ const char MAP_PAGE[] = R"rawliteral(
     <button id="locateBtn">Use Location</button>
     <button id="resetBtn">Reset</button>
     <button id="sendBtn" disabled>Send</button>
+  </div>
+  <div id="searchPanel">
+    <input id="addressInput" type="search" maxlength="70" placeholder="Search a French address" autocomplete="off" />
+    <button id="departureSearchBtn" type="button">Departure</button>
+    <button id="arrivalSearchBtn" type="button">Arrival</button>
+    <div id="searchResults"></div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -85,6 +109,12 @@ const char MAP_PAGE[] = R"rawliteral(
     const sendBtn = document.getElementById('sendBtn');
     const resetBtn = document.getElementById('resetBtn');
     const locateBtn = document.getElementById('locateBtn');
+    const addressInput = document.getElementById('addressInput');
+    const departureSearchBtn = document.getElementById('departureSearchBtn');
+    const arrivalSearchBtn = document.getElementById('arrivalSearchBtn');
+    const searchResults = document.getElementById('searchResults');
+    let searchSlot = 'departure';
+    let searchTimer = null;
 
     function updateStatus() {
       if (!startMarker) {
@@ -95,6 +125,76 @@ const char MAP_PAGE[] = R"rawliteral(
         statusEl.textContent = 'Ready';
       }
       sendBtn.disabled = !(startMarker && endMarker);
+    }
+
+    function clearSearchResults() {
+      searchResults.replaceChildren();
+      searchResults.style.display = 'none';
+    }
+
+    function setSlotMarker(slot, latlng, label) {
+      const markerOptions = { title: label };
+      if (slot === 'departure') {
+        if (startMarker) map.removeLayer(startMarker);
+        startMarker = L.marker(latlng, markerOptions).addTo(map)
+          .bindPopup('Departure: ' + label).openPopup();
+      } else {
+        if (endMarker) map.removeLayer(endMarker);
+        endMarker = L.marker(latlng, markerOptions).addTo(map)
+          .bindPopup('Arrival: ' + label).openPopup();
+      }
+      map.setView(latlng, 15);
+      addressInput.value = label;
+      clearSearchResults();
+      updateStatus();
+    }
+
+    function searchAddress(slot) {
+      const query = addressInput.value.trim();
+      if (query.length < 3) {
+        statusEl.textContent = 'Enter at least 3 characters';
+        return;
+      }
+
+      searchSlot = slot;
+      clearSearchResults();
+      statusEl.textContent = 'Searching...';
+      departureSearchBtn.disabled = true;
+      arrivalSearchBtn.disabled = true;
+
+      fetch('/search?text=' + encodeURIComponent(query))
+        .then(function (response) {
+          return response.json().then(function (result) {
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Search unavailable');
+            return result;
+          });
+        })
+        .then(function (result) {
+          if (!result.results.length) {
+            statusEl.textContent = 'No addresses found';
+            return;
+          }
+
+          result.results.forEach(function (item) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'result';
+            button.textContent = item.label;
+            button.addEventListener('click', function () {
+              setSlotMarker(searchSlot, L.latLng(item.lat, item.lng), item.label);
+            });
+            searchResults.appendChild(button);
+          });
+          searchResults.style.display = 'block';
+          statusEl.textContent = 'Choose an address';
+        })
+        .catch(function (err) {
+          statusEl.textContent = err.message || 'Search unavailable';
+        })
+        .finally(function () {
+          departureSearchBtn.disabled = false;
+          arrivalSearchBtn.disabled = false;
+        });
     }
 
     function decodePolyline(encodedPolyline, includeElevation) {
@@ -234,6 +334,20 @@ const char MAP_PAGE[] = R"rawliteral(
       applyToNextSlot(e.latlng);
     });
 
+    departureSearchBtn.addEventListener('click', function () { searchAddress('departure'); });
+    arrivalSearchBtn.addEventListener('click', function () { searchAddress('arrival'); });
+    addressInput.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      clearSearchResults();
+      if (addressInput.value.trim().length < 3) return;
+      searchTimer = setTimeout(function () {
+        searchAddress(searchSlot);
+      }, 350);
+    });
+    addressInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') searchAddress(searchSlot);
+    });
+
     resetBtn.addEventListener('click', function () {
       if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
       if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
@@ -354,6 +468,68 @@ static esp_err_t handleSetRoute(httpd_req_t *req)
   return ESP_OK;
 }
 
+static esp_err_t handleSearch(httpd_req_t *req)
+{
+  char query[80];
+  httpd_resp_set_type(req, "application/json");
+
+  if (!getQueryParam(req, "text", query, sizeof(query)) || strlen(query) < 3 || strlen(query) > 70)
+  {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "{\"ok\":false,\"error\":\"Address must contain between 3 and 70 characters\"}", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+
+  GeocodeResult results[5];
+  size_t resultCount = 0;
+  if (!searchAddress(query, results, 5, resultCount))
+  {
+    httpd_resp_set_status(req, "502 Bad Gateway");
+    httpd_resp_send(req, "{\"ok\":false,\"error\":\"Address search failed\"}", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+
+  String response = "{\"ok\":true,\"results\":[";
+  for (size_t index = 0; index < resultCount; ++index)
+  {
+    if (index > 0) response += ',';
+    response += "{\"label\":\"";
+    for (size_t characterIndex = 0; characterIndex < results[index].label.length(); ++characterIndex)
+    {
+      char character = results[index].label[characterIndex];
+      if (character == '\\' || character == '"')
+      {
+        response += '\\';
+        response += character;
+      }
+      else if (character == '\n')
+      {
+        response += "\\n";
+      }
+      else if (character == '\r')
+      {
+        response += "\\r";
+      }
+      else if (character == '\t')
+      {
+        response += "\\t";
+      }
+      else
+      {
+        response += character;
+      }
+    }
+    response += "\",\"lat\":";
+    response += String(results[index].lat, 6);
+    response += ",\"lng\":";
+    response += String(results[index].lng, 6);
+    response += '}';
+  }
+  response += "]}";
+  httpd_resp_send(req, response.c_str(), response.length());
+  return ESP_OK;
+}
+
 static esp_err_t handleRouteStatus(httpd_req_t *req)
 {
   httpd_resp_set_type(req, "application/json");
@@ -456,11 +632,13 @@ void setupWebServer()
 
   httpd_uri_t uriRoot     = {.uri = "/",         .method = HTTP_GET, .handler = handleRoot,           .user_ctx = NULL};
   httpd_uri_t uriRoute    = {.uri = "/route",    .method = HTTP_GET, .handler = handleSetRoute,       .user_ctx = NULL};
+  httpd_uri_t uriSearch   = {.uri = "/search",   .method = HTTP_GET, .handler = handleSearch,        .user_ctx = NULL};
   httpd_uri_t uriRouteStatus = {.uri = "/route-status", .method = HTTP_GET, .handler = handleRouteStatus, .user_ctx = NULL};
   httpd_uri_t uriLocation = {.uri = "/location", .method = HTTP_GET, .handler = handleUpdateLocation, .user_ctx = NULL};
 
   httpd_register_uri_handler(server, &uriRoot);
   httpd_register_uri_handler(server, &uriRoute);
+  httpd_register_uri_handler(server, &uriSearch);
   httpd_register_uri_handler(server, &uriRouteStatus);
   httpd_register_uri_handler(server, &uriLocation);
   httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, handle404);

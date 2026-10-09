@@ -6,3 +6,20 @@ In order to compile the program in the ESP32, there are a few libraries that you
 -Adafruit SSD1306 (by Adafruit)
 -wifiManager (By tzapu)
 -ArduinoJson (By Benoit Blanchon)
+
+## Address search
+
+The HTTPS map page supports searching for departure and arrival addresses in
+France. Suggestions appear after typing at least three characters. Each
+search is sent to the ESP32 `/search` endpoint, which forwards it to
+OpenRouteService geocoding and returns up to five matches. Select a match to
+place its coordinates on the map, then use **Send** as before.
+
+Use a complete address where possible: street number, street name, postal
+code, city, and `France`, for example `5 Avenue Anatole France, 75007 Paris,
+France`. The search is restricted to France with the ORS `FRA` country
+boundary.
+
+The ORS key in `navigation/ors_api_key.h` must have access to both directions
+and geocoding. Address search uses the ORS Pelias forward-geocoding service;
+Leaflet remains responsible only for displaying the map and markers.

@@ -13,7 +13,7 @@ The HTTPS map page supports searching for departure and arrival addresses in
 France. Suggestions appear after typing at least three characters. Each
 search is sent to the ESP32 `/search` endpoint, which forwards it to
 OpenRouteService geocoding and returns up to five matches. Select a match to
-place its coordinates on the map, then use **Send** as before.
+The first selected address becomes the arrival and the second becomes the departure. Once a marker exists, its Change button can be used to replace that address. Pressing Enter selects the first suggestion for the active slot. Each search is sent to the ESP32 `/search` endpoint, which forwards previews to ORS autocomplete and committed searches to ORS geocoding. Use **Let's go** after both markers are set.
 
 Use a complete address where possible: street number, street name, postal
 code, city, and `France`, for example `5 Avenue Anatole France, 75007 Paris,

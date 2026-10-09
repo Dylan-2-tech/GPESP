@@ -50,7 +50,8 @@ const char MAP_PAGE[] = R"rawliteral(
     #searchPanel {
       position: absolute;
       top: 16px;
-      left: 16px;
+      left: 50%;
+      transform: translateX(-50%);
       z-index: 1000;
       display: flex;
       flex-wrap: wrap;
@@ -61,7 +62,9 @@ const char MAP_PAGE[] = R"rawliteral(
       border-radius: 10px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     }
-    #searchPanel input { flex: 1 1 220px; min-width: 0; padding: 7px 8px; font-size: 14px; border: 1px solid #adb5bd; border-radius: 6px; }
+    #searchPanel input { flex: 1 1 280px; min-width: 0; padding: 7px 8px; font-size: 14px; border: 1px solid #adb5bd; border-radius: 6px; }
+    #slotControls { display: flex; gap: 6px; }
+    #slotControls button { display: none; background: #6c757d; }
     #searchResults { display: none; flex-basis: 100%; max-height: 180px; overflow-y: auto; }
     .result { display: block; width: 100%; padding: 7px; text-align: left; background: #f8f9fa; color: #212529; border: 1px solid #dee2e6; border-radius: 4px; white-space: normal; }
 
@@ -79,12 +82,14 @@ const char MAP_PAGE[] = R"rawliteral(
     <span id="status">Set departure</span>
     <button id="locateBtn">Use Location</button>
     <button id="resetBtn">Reset</button>
-    <button id="sendBtn" disabled>Send</button>
+    <button id="sendBtn" disabled>Let's go</button>
   </div>
   <div id="searchPanel">
-    <input id="addressInput" type="search" maxlength="70" placeholder="Search a French address" autocomplete="off" />
-    <button id="departureSearchBtn" type="button">Departure</button>
-    <button id="arrivalSearchBtn" type="button">Arrival</button>
+    <input id="addressInput" type="search" maxlength="70" placeholder="Enter arrival" autocomplete="off" />
+    <div id="slotControls">
+      <button id="changeArrivalBtn" type="button">Change arrival</button>
+      <button id="changeDepartureBtn" type="button">Change departure</button>
+    </div>
     <div id="searchResults"></div>
   </div>
 
@@ -110,11 +115,12 @@ const char MAP_PAGE[] = R"rawliteral(
     const resetBtn = document.getElementById('resetBtn');
     const locateBtn = document.getElementById('locateBtn');
     const addressInput = document.getElementById('addressInput');
-    const departureSearchBtn = document.getElementById('departureSearchBtn');
-    const arrivalSearchBtn = document.getElementById('arrivalSearchBtn');
+    const changeArrivalBtn = document.getElementById('changeArrivalBtn');
+    const changeDepartureBtn = document.getElementById('changeDepartureBtn');
     const searchResults = document.getElementById('searchResults');
-    let searchSlot = 'departure';
+    let searchSlot = 'arrival';
     let searchTimer = null;
+    let enterRequested = false;
 
     function updateStatus() {
       if (!startMarker) {
@@ -132,6 +138,21 @@ const char MAP_PAGE[] = R"rawliteral(
       searchResults.style.display = 'none';
     }
 
+    function updateSearchState() {
+      changeArrivalBtn.style.display = endMarker ? 'inline-block' : 'none';
+      changeDepartureBtn.style.display = startMarker ? 'inline-block' : 'none';
+
+      if (!endMarker) {
+        searchSlot = 'arrival';
+        addressInput.placeholder = 'Enter arrival';
+      } else if (!startMarker) {
+        searchSlot = 'departure';
+        addressInput.placeholder = 'Enter departure';
+      } else {
+        addressInput.placeholder = searchSlot === 'arrival' ? 'Change arrival' : 'Change departure';
+      }
+    }
+
     function setSlotMarker(slot, latlng, label) {
       const markerOptions = { title: label };
       if (slot === 'departure') {
@@ -144,12 +165,13 @@ const char MAP_PAGE[] = R"rawliteral(
           .bindPopup('Arrival: ' + label).openPopup();
       }
       map.setView(latlng, 15);
-      addressInput.value = label;
+      addressInput.value = '';
       clearSearchResults();
       updateStatus();
+      updateSearchState();
     }
 
-    function searchAddress(slot) {
+    function searchAddress(slot, selectFirst) {
       const query = addressInput.value.trim();
       if (query.length < 3) {
         statusEl.textContent = 'Enter at least 3 characters';
@@ -159,10 +181,10 @@ const char MAP_PAGE[] = R"rawliteral(
       searchSlot = slot;
       clearSearchResults();
       statusEl.textContent = 'Searching...';
-      departureSearchBtn.disabled = true;
-      arrivalSearchBtn.disabled = true;
+      changeArrivalBtn.disabled = true;
+      changeDepartureBtn.disabled = true;
 
-      fetch('/search?text=' + encodeURIComponent(query))
+      fetch('/search?text=' + encodeURIComponent(query) + '&autocomplete=' + (selectFirst ? '0' : '1'))
         .then(function (response) {
           return response.json().then(function (result) {
             if (!response.ok || !result.ok) throw new Error(result.error || 'Search unavailable');
@@ -172,6 +194,13 @@ const char MAP_PAGE[] = R"rawliteral(
         .then(function (result) {
           if (!result.results.length) {
             statusEl.textContent = 'No addresses found';
+            return;
+          }
+
+          if (selectFirst) {
+            const item = result.results[0];
+            setSlotMarker(searchSlot, L.latLng(item.lat, item.lng), item.label);
+            statusEl.textContent = searchSlot === 'arrival' ? 'Arrival set' : 'Departure set';
             return;
           }
 
@@ -192,8 +221,8 @@ const char MAP_PAGE[] = R"rawliteral(
           statusEl.textContent = err.message || 'Search unavailable';
         })
         .finally(function () {
-          departureSearchBtn.disabled = false;
-          arrivalSearchBtn.disabled = false;
+          changeArrivalBtn.disabled = false;
+          changeDepartureBtn.disabled = false;
         });
     }
 
@@ -291,6 +320,7 @@ const char MAP_PAGE[] = R"rawliteral(
           .bindPopup('Arrival').openPopup();
       }
       updateStatus();
+      updateSearchState();
     }
 
     // Creates/updates the blue "my location" dot
@@ -334,24 +364,42 @@ const char MAP_PAGE[] = R"rawliteral(
       applyToNextSlot(e.latlng);
     });
 
-    departureSearchBtn.addEventListener('click', function () { searchAddress('departure'); });
-    arrivalSearchBtn.addEventListener('click', function () { searchAddress('arrival'); });
+    changeArrivalBtn.addEventListener('click', function () {
+      searchSlot = 'arrival';
+      addressInput.value = '';
+      addressInput.placeholder = 'Change arrival';
+      addressInput.focus();
+      clearSearchResults();
+    });
+    changeDepartureBtn.addEventListener('click', function () {
+      searchSlot = 'departure';
+      addressInput.value = '';
+      addressInput.placeholder = 'Change departure';
+      addressInput.focus();
+      clearSearchResults();
+    });
     addressInput.addEventListener('input', function () {
       clearTimeout(searchTimer);
       clearSearchResults();
       if (addressInput.value.trim().length < 3) return;
       searchTimer = setTimeout(function () {
-        searchAddress(searchSlot);
+        searchAddress(searchSlot, false);
       }, 350);
     });
     addressInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') searchAddress(searchSlot);
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        clearTimeout(searchTimer);
+        searchAddress(searchSlot, true);
+      }
     });
 
     resetBtn.addEventListener('click', function () {
       if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
       if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
       clearRouteLine();
+      addressInput.value = '';
+      updateSearchState();
       // myLocationMarker is intentionally left on the map
       updateStatus();
     });
@@ -471,6 +519,7 @@ static esp_err_t handleSetRoute(httpd_req_t *req)
 static esp_err_t handleSearch(httpd_req_t *req)
 {
   char query[80];
+  char autocompleteParam[8];
   httpd_resp_set_type(req, "application/json");
 
   if (!getQueryParam(req, "text", query, sizeof(query)) || strlen(query) < 3 || strlen(query) > 70)
@@ -482,7 +531,9 @@ static esp_err_t handleSearch(httpd_req_t *req)
 
   GeocodeResult results[5];
   size_t resultCount = 0;
-  if (!searchAddress(query, results, 5, resultCount))
+  bool autocomplete = getQueryParam(req, "autocomplete", autocompleteParam, sizeof(autocompleteParam)) &&
+                      strcmp(autocompleteParam, "1") == 0;
+  if (!searchAddress(query, results, 5, resultCount, autocomplete))
   {
     httpd_resp_set_status(req, "502 Bad Gateway");
     httpd_resp_send(req, "{\"ok\":false,\"error\":\"Address search failed\"}", HTTPD_RESP_USE_STRLEN);

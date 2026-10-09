@@ -28,7 +28,7 @@ void setRoutePoints(double startLat, double startLng, double endLat, double endL
 
 // Searches ORS for an address and returns up to maxResults matches.
 // Results use decimal-degree latitude/longitude values for Leaflet.
-bool searchAddress(const char* query, GeocodeResult* results, size_t maxResults, size_t& resultCount);
+bool searchAddress(const char* query, GeocodeResult* results, size_t maxResults, size_t& resultCount, bool autocomplete = false);
 
 // Runs a queued route request. Call from loop(), not from a web-server handler.
 void processRouteRequest();

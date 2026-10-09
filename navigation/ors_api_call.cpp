@@ -3,6 +3,7 @@
 // ORS API endpoint and key (POST JSON response variant)
 const char* ORS_BASE_URL = "https://api.heigit.org/openrouteservice/v2/directions/cycling-regular/json";
 const char* ORS_GEOCODE_BASE_URL = "https://api.openrouteservice.org/geocode/search";
+const char* ORS_AUTOCOMPLETE_BASE_URL = "https://api.openrouteservice.org/geocode/autocomplete";
 
 // Default departure/arrival points (same spot as the original hardcoded
 // request) - overwritten by setRoutePoints() once the web page sends new ones
@@ -54,7 +55,7 @@ static String urlEncode(const char* value)
     return encoded;
 }
 
-bool searchAddress(const char* query, GeocodeResult* results, size_t maxResults, size_t& resultCount)
+bool searchAddress(const char* query, GeocodeResult* results, size_t maxResults, size_t& resultCount, bool autocomplete)
 {
     resultCount = 0;
     if (query == nullptr || results == nullptr || maxResults == 0 || strlen(query) == 0 || WiFi.status() != WL_CONNECTED)
@@ -62,7 +63,7 @@ bool searchAddress(const char* query, GeocodeResult* results, size_t maxResults,
         return false;
     }
 
-    String url = ORS_GEOCODE_BASE_URL;
+    String url = autocomplete ? ORS_AUTOCOMPLETE_BASE_URL : ORS_GEOCODE_BASE_URL;
     url += "?text=";
     url += urlEncode(query);
     url += "&size=5&boundary.country=FRA";
